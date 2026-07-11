@@ -56,10 +56,7 @@ magmos/
 | MagmosUSDC (faucet test token) | `0x3248CcD4c276b4785f81f8c1207094262F67a33C` |
 
 **49 Foundry tests** (unit, fuzz, full-lifecycle, reentrancy-attack) — plus a 3-agent code
-review with every finding fixed and redeployed. The streaming engine ports the battle-tested
-math of [Sweem](https://github.com/snehendu098/sweem) (per-second accrual, pause accounting,
-crystallize-on-rate-change, anti-dust claim floor) from Sui Move to Solidity.
-
+review with every finding fixed and redeployed. 
 ## Quickstart
 
 ```bash
