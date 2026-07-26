@@ -55,6 +55,14 @@ contract MagmosPayroll is ReentrancyGuard {
         bool exists;
     }
 
+    /// @notice Deployer, permitted to wire the advance module exactly once (see setAdvanceModule).
+    address public immutable deployer;
+    /// @notice The only contract allowed to settle earned-wage advances against streams.
+    /// @dev Zero until wired; settable once and never again, so a later key compromise cannot
+    ///      redirect recipient funds through a malicious module.
+    address public advanceModule;
+    bool private _advanceModuleSet;
+
     mapping(bytes32 poolId => Pool) private _pools;
     mapping(bytes32 poolId => mapping(address employee => Stream)) private _streams;
     mapping(bytes32 poolId => mapping(address account => uint8 roleBits)) private _delegatedRoles;
@@ -91,6 +99,16 @@ contract MagmosPayroll is ReentrancyGuard {
     event StreamStopped(bytes32 indexed poolId, address indexed employee, uint256 stoppedAt);
     event PoolRoleGranted(bytes32 indexed poolId, address indexed account, uint8 role);
     event PoolRoleRevoked(bytes32 indexed poolId, address indexed account, uint8 role);
+    event AdvanceModuleSet(address indexed module);
+    /// @notice A portion of accrued pay was settled early (earned-wage advance) to `to`.
+    event AdvanceSettled(
+        bytes32 indexed poolId,
+        address indexed employee,
+        uint256 amount,
+        address indexed to,
+        uint256 remainingClaimable,
+        uint256 timestamp
+    );
 
     error NotOrg();
     error PoolNotFound();
@@ -106,10 +124,24 @@ contract MagmosPayroll is ReentrancyGuard {
     error InvalidRatePeriod();
     error NotAuthorized();
     error ZeroAddress();
+    error NotAdvanceModule();
+    error AdvanceModuleAlreadySet();
+    error ExceedsClaimable();
 
     constructor(address registry_) {
         if (registry_ == address(0)) revert ZeroAddress();
         registry = IMagmosRegistry(registry_);
+        deployer = msg.sender;
+    }
+
+    /// @notice Wire the earned-wage-advance module. Callable once, by the deployer, forever.
+    function setAdvanceModule(address module) external {
+        if (msg.sender != deployer) revert NotAuthorized();
+        if (_advanceModuleSet) revert AdvanceModuleAlreadySet();
+        if (module == address(0)) revert ZeroAddress();
+        _advanceModuleSet = true;
+        advanceModule = module;
+        emit AdvanceModuleSet(module);
     }
 
     /// @notice Deterministic pool id for an (org, token) pair.
@@ -190,6 +222,52 @@ contract MagmosPayroll is ReentrancyGuard {
         emit FundsClaimed(poolId, msg.sender, claimable, block.timestamp);
 
         IERC20(pool.token).safeTransfer(msg.sender, claimable);
+    }
+
+    /// @notice Settle `amount` of an employee's ALREADY-EARNED pay early (earned-wage advance),
+    ///         paying it to `to`. Callable only by the wired advance module.
+    /// @dev This is deliberately a thin primitive: it adds no new streaming math. It reuses the
+    ///      same `_effectiveEnd`/`_accrued` pair `claim()` uses, so the advance can never disagree
+    ///      with the claim path about what has been earned.
+    ///
+    ///      The "debit" is structural rather than a parallel debt ledger: accrual is crystallized
+    ///      into `pendingBalance` (exactly as a rate change does in `_upsertStream`) and `amount`
+    ///      is subtracted from it. The remainder stays claimable, so the worker's next `claim()`
+    ///      is automatically reduced by whatever was drawn — there is no second number to drift.
+    ///
+    ///      An advance is therefore never a loan: it can only ever pay out wages the stream has
+    ///      already accrued, and it is repaid by the claim the worker was always going to make.
+    /// @param to Destination for the funds (the module, which then applies fee/subsidy accounting).
+    /// @return remainingClaimable Claimable left on the stream immediately after the draw.
+    function settleAdvance(bytes32 poolId, address employee, uint256 amount, address to)
+        external
+        nonReentrant
+        returns (uint256 remainingClaimable)
+    {
+        if (msg.sender != advanceModule) revert NotAdvanceModule();
+        if (to == address(0)) revert ZeroAddress();
+        Pool storage pool = _pools[poolId];
+        if (!pool.exists) revert PoolNotFound();
+        Stream storage s = _streams[poolId][employee];
+        if (!s.exists) revert StreamNotFound();
+        if (amount == 0) revert ZeroClaimable();
+
+        uint64 effEnd = _effectiveEnd(s);
+        uint256 available = s.pendingBalance + _accrued(s, effEnd);
+        if (amount > available) revert ExceedsClaimable();
+        if (pool.balance < amount) revert InsufficientPoolBalance();
+
+        // effects (checks-effects-interactions + nonReentrant)
+        pool.totalClaimed += amount;
+        pool.balance -= amount;
+        s.claimedAt = effEnd;
+        s.totalPausedSecs = 0;
+        s.pendingBalance = available - amount; // crystallized remainder stays claimable
+        remainingClaimable = s.pendingBalance;
+
+        emit AdvanceSettled(poolId, employee, amount, to, remainingClaimable, block.timestamp);
+
+        IERC20(pool.token).safeTransfer(to, amount);
     }
 
     // ------------------------------------------------------------------ stream control
