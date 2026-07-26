@@ -7,13 +7,7 @@ import type { Address } from "viem";
 
 import { TOKENS, toRaw, fromRaw, type TokenConfig } from "@/lib/tokens";
 import { EXPLORER_TX } from "@/lib/magmos";
-import {
-  getDrawable,
-  getAdvanceAccount,
-  getAdvancePolicy,
-  quoteAdvance,
-  getAdvanceHistory,
-} from "@/lib/reads";
+import { getAdvanceSnapshot, quoteAdvance, getAdvanceHistory } from "@/lib/reads";
 import { drawAdvance } from "@/lib/writes";
 import { ActionButton, Modal, AmountField } from "./ui";
 import { useTxRunner } from "./use-tx-runner";
@@ -60,19 +54,16 @@ export function AdvancePanel({
     queryKey: ["drawable", poolId, wallet],
     enabled: !!wallet,
     refetchInterval: 5000,
-    // Deliberately NOT catching per-read: a failed RPC must not be rendered as a factual
-    // "0.00 available", which would tell a worker their pay is gone. Letting the query fail
-    // keeps the last good value on screen and surfaces an honest "checking" state instead.
+    // One multicall, and deliberately NOT catching per-read: a failed RPC must not render as a
+    // factual "0.00 available", which would tell a worker their pay is gone. Letting the query
+    // fail keeps the last good value on screen and shows an honest "checking" state instead.
     queryFn: async () => {
-      const [drawable, account, policy] = await Promise.all([
-        getDrawable(poolId, wallet),
-        getAdvanceAccount(poolId, wallet),
-        getAdvancePolicy(poolId),
-      ]);
+      const { drawable, account, policy } = await getAdvanceSnapshot(poolId, wallet);
       const quote = drawable > 0n ? await quoteAdvance(poolId, drawable).catch(() => null) : null;
       return { drawable, account, policy, quote };
     },
     retry: 3,
+    placeholderData: (prev) => prev,
   });
 
   const historyQuery = useQuery({

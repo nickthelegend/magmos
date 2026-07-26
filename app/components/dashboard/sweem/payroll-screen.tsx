@@ -179,6 +179,17 @@ export function PayrollScreen() {
         </div>
       </div>
 
+      {/* Chain unreachable — never let an RPC failure read as "you have no payroll". */}
+      {stateQuery.isError && !stateQuery.data && (
+        <div className="mb-4 rounded-[14px] border border-[rgba(255,121,75,0.28)] bg-[rgba(255,121,75,0.08)] px-4 py-3">
+          <p className="text-[13px] font-semibold text-[#ff794b]">Can’t reach Arc right now</p>
+          <p className="mt-1 text-[12.5px] text-[var(--sw-text-muted)]">
+            The public RPC is rate-limiting requests, so the figures below are not live. Your
+            streams and balances on-chain are unaffected — this view will recover on its own.
+          </p>
+        </div>
+      )}
+
       {/* Metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SweemCard>

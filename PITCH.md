@@ -116,3 +116,26 @@ settlement is the wedge; Arc makes it dollar-native.
 - Circle **Gateway** (unified treasury balance for the sender) · **StableFX** (pay-in-AED,
   settle-in-USDC) · CCTP **auto-mint** on destination · production **USYC** yield · compliance +
   fiat off-ramp partners per corridor · mainnet at Arc GA.
+
+---
+
+## Earned Wage Access — the wedge
+
+A live competitor in India (Ashneer Grover's "Fund My Staff") launched this month on INR rails: an
+NBFC, credit-bureau underwriting, and the **employer signing as guarantor**. All of that exists to
+answer one question — *will this person actually get paid?*
+
+Magmos answers it structurally. Payroll streams on-chain every second, so a worker's
+earned-but-unclaimed balance is not a prediction; it is contract state, already escrowed by the
+employer. That balance **is** the collateral.
+
+So the product needs **no bureau, no guarantor, no underwriting, and no new KYC**:
+
+- A draw can never exceed wages already accrued — enforced in the same accrual math `claim()` uses.
+- Repayment is automatic and unfailable: the draw is deducted from the accrued balance it came
+  from, so the next claim is simply smaller. There is no debt to default on.
+- The 0.5% access fee is paid by **yield on the idle payroll float** — the employer's money works
+  while it waits and covers the worker's fee. Auditable on-chain, per draw.
+
+"Payroll that arrives every second" becomes **"payroll you can reach the moment you've earned it."**
+Same rail, same escrow, no new risk — a feature competitors need a lending licence to match.

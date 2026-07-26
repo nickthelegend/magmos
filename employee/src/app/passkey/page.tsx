@@ -9,12 +9,20 @@ import {
   registerPasskey,
   loginPasskey,
   smartAccountFrom,
+  sendGaslessCall,
 } from "@/lib/circle";
-import { getEmployeePools, getClaimable } from "@/lib/reads";
-import { MAGMOS_PAYROLL, PAYROLL_ABI, USDC_DECIMALS, EXPLORER_TX } from "@/lib/magmos";
+import { getEmployeePools, getClaimable, getDrawable } from "@/lib/reads";
+import {
+  MAGMOS_PAYROLL,
+  MAGMOS_ADVANCE,
+  PAYROLL_ABI,
+  ADVANCE_ABI,
+  USDC_DECIMALS,
+  EXPLORER_TX,
+} from "@/lib/magmos";
 
 type Ctx = Awaited<ReturnType<typeof smartAccountFrom>>;
-type Pool = { poolId: `0x${string}`; claimable: bigint };
+type Pool = { poolId: `0x${string}`; claimable: bigint; drawable: bigint };
 
 // Passkey onboarding for non-crypto recipients: Face ID / fingerprint → Circle Smart Account
 // on Arc → gasless claim. No seed phrase, no gas token needed.
@@ -35,6 +43,7 @@ export default function PasskeyPage() {
         ids.map(async (poolId) => ({
           poolId,
           claimable: await getClaimable(poolId, addr).catch(() => 0n),
+          drawable: await getDrawable(poolId, addr).catch(() => 0n),
         }))
       );
       setPools(withClaim);
@@ -77,6 +86,30 @@ export default function PasskeyPage() {
           ? 'No passkey found — tap "Create wallet with passkey" first.'
           : err.message?.slice(0, 140) || "Passkey sign-in failed"
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Earned Wage Access over the same gasless rail. Note this goes through the generic
+  // `sendGaslessCall` helper rather than re-inlining the bundler call: the wrapper takes an
+  // arbitrary {to, data}, so shipping a new contract method needs no new wallet plumbing.
+  async function onDraw(poolId: `0x${string}`, amount: bigint) {
+    if (!ctx || amount === 0n) return;
+    setBusy(true);
+    try {
+      const data = encodeFunctionData({
+        abi: ADVANCE_ABI,
+        functionName: "drawAdvance",
+        args: [poolId, amount],
+      });
+      const hash = await sendGaslessCall(ctx, { to: MAGMOS_ADVANCE, data });
+      toast.success("Advance submitted (gasless)");
+      await ctx.bundler.waitForUserOperationReceipt({ hash });
+      toast.success("Your earned pay is in your wallet");
+      await loadStreams(ctx.address);
+    } catch (e) {
+      toast.error((e as Error).message?.slice(0, 140) || "Draw failed");
     } finally {
       setBusy(false);
     }
@@ -187,14 +220,22 @@ export default function PasskeyPage() {
                 </p>
               ) : (
                 pools.map((p) => (
-                  <button
-                    key={p.poolId}
-                    onClick={() => onClaim(p.poolId)}
-                    disabled={busy || p.claimable === 0n}
-                    className="w-full rounded-xl bg-[#ff6a1a] py-2.5 text-[13.5px] font-semibold text-black transition-colors hover:bg-[#ff8340] disabled:opacity-50"
-                  >
-                    Claim {Number(formatUnits(p.claimable, USDC_DECIMALS)).toLocaleString(undefined, { maximumFractionDigits: 4 })} USDC (gasless)
-                  </button>
+                  <div key={p.poolId} className="space-y-2">
+                    <button
+                      onClick={() => onClaim(p.poolId)}
+                      disabled={busy || p.claimable === 0n}
+                      className="w-full rounded-xl bg-[#ff6a1a] py-2.5 text-[13.5px] font-semibold text-black transition-colors hover:bg-[#ff8340] disabled:opacity-50"
+                    >
+                      Claim {Number(formatUnits(p.claimable, USDC_DECIMALS)).toLocaleString(undefined, { maximumFractionDigits: 4 })} USDC (gasless)
+                    </button>
+                    <button
+                      onClick={() => onDraw(p.poolId, p.drawable)}
+                      disabled={busy || p.drawable === 0n}
+                      className="w-full rounded-xl border border-[#2c2c31] bg-[#151517] py-2.5 text-[13.5px] font-semibold text-[#f4f4f5] transition-colors hover:border-[#ff6a1a] disabled:opacity-50"
+                    >
+                      Get {Number(formatUnits(p.drawable, USDC_DECIMALS)).toLocaleString(undefined, { maximumFractionDigits: 4 })} USDC early (gasless)
+                    </button>
+                  </div>
                 ))
               )}
             </div>

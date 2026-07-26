@@ -236,3 +236,28 @@ or deleted phase-by-phase.
    USYC in core scope vs. drop yield entirely.
 3. **Recipient wallet UX** — wagmi + injected/MetaMask now, Circle Wallets embedded later
    (recommended) vs. Circle Wallets embedded from the start.
+
+---
+
+## Earned Wage Access — shipped, and what was deliberately left out
+
+**Shipped (live on Arc testnet):** `MagmosAdvance` + the `settleAdvance` primitive. Workers draw
+pay they have already streamed; repayment is structural (netted off the next claim), the access
+fee is covered by yield on the payroll float, and employers set an exposure envelope rather than
+approving individual draws. See [docs/EARNED-WAGE-ACCESS.md](docs/EARNED-WAGE-ACCESS.md).
+
+**Explicitly NOT built, to keep one loop bulletproof rather than four half-finished:**
+
+- **Neo-bank surface** — multi-currency balances, spend cards, an FX desk. A real direction, but it
+  dilutes a demo whose whole point is a single verifiable money loop.
+- **Underwriting of any kind** — credit bureau pulls, NBFC-style risk scoring, KYC beyond the
+  wallet. The thesis is that on-chain accrued wages *are* the underwriting; adding a bureau would
+  contradict the product.
+- **Draws against *future* (unearned) pay.** This is the line between earned wage access and a
+  payday loan, and the contract enforces it (`ExceedsClaimable`). Crossing it would need real
+  underwriting, licensing, and default handling.
+- **Pool solvency guarantees.** Advances surface an underfunded pool sooner (see the limitation
+  note in the EWA doc). A proper fix — an employer-side reserve requirement or a coverage
+  invariant across all streams in a pool — is the most valuable next piece of work here.
+- **Real USYC routing** for the subsidy yield. Today's yield vault is a testnet rail; production
+  should route the float to Circle/Hashnote USYC and fund the subsidy from actual yield.

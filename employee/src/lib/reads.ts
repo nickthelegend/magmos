@@ -20,9 +20,6 @@ import { REAL_USDC } from './cctp'
 export const publicClient = createPublicClient({
   chain: arcTestnet,
   transport: http(ARC_RPC_URL),
-  // Coalesce concurrent reads into multicall3 aggregates so the portal's polling (claimable,
-  // drawable, advance account, policy, quote) stays well inside the public RPC's rate limit.
-  batch: { multicall: { wait: 20 } },
 })
 
 export interface PoolSummary {
@@ -121,6 +118,38 @@ export const getAdvanceAccount = (poolId: `0x${string}`, emp: Address) =>
   readAdvance<AdvanceAccount>('accountOf', [poolId, emp])
 export const quoteAdvance = (poolId: `0x${string}`, amount: bigint) =>
   readAdvance<AdvanceQuote>('quote', [poolId, amount])
+
+export interface AdvanceSnapshot {
+  drawable: bigint
+  account: AdvanceAccount
+  policy: AdvancePolicy
+}
+
+/**
+ * The worker's whole early-access state in ONE request.
+ *
+ * Arc's public RPC rejects concurrent requests ("request limit reached"), so these must go over
+ * the wire as a single multicall3 aggregate rather than parallel eth_calls. `allowFailure: false`
+ * keeps it honest — a failed read rejects rather than reporting a drawable of zero.
+ */
+export async function getAdvanceSnapshot(
+  poolId: `0x${string}`,
+  worker: Address
+): Promise<AdvanceSnapshot> {
+  const res = await publicClient.multicall({
+    contracts: [
+      { address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'drawableAmount', args: [poolId, worker] },
+      { address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'accountOf', args: [poolId, worker] },
+      { address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'policyOf', args: [poolId] },
+    ],
+    allowFailure: false,
+  })
+  return {
+    drawable: res[0] as bigint,
+    account: res[1] as AdvanceAccount,
+    policy: res[2] as AdvancePolicy,
+  }
+}
 
 export interface AdvanceDraw {
   amount: bigint

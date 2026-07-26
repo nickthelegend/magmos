@@ -38,6 +38,8 @@ magmos/
 |---|---|
 | Per-second streaming payroll (fund / pause / resume / stop / re-hire) | ✅ live on Arc |
 | Recipient live ticker + one-tx claim | ✅ |
+| **Earned Wage Access** — draw pay you've already streamed, before payday | ✅ live on Arc |
+| Access fee covered by payroll-float yield (the worker pays nothing) | ✅ live |
 | **CCTP v2 "Send home"** cross-chain USDC bridge + Circle attestation | ✅ |
 | **Circle Wallets** passkey onboarding (gasless claim, no seed phrase) | ✅ |
 | Treasury **yield vault** — idle payroll float earns while it waits | ✅ live |
@@ -45,11 +47,40 @@ magmos/
 | In-app test-USDC **faucet** | ✅ |
 | Org/recipient metadata API (EIP-191 auth + MongoDB) | ✅ |
 
+## Earned Wage Access — pay you've earned, before payday
+
+Wage-advance products can't verify you'll actually get paid, so they underwrite off credit
+bureaus, charge payday-loan rates, or make your employer sign as guarantor. Magmos removes the
+question entirely: because payroll **streams on-chain every second**, your earned-but-unclaimed
+balance isn't a prediction — it's contract state, already escrowed by your employer.
+
+So the accrued balance *is* the collateral, and a draw is not a loan:
+
+- A draw can **never exceed wages already accrued** — enforced on-chain, in the same
+  `_accrued`/`_effectiveEnd` math `claim()` uses, so the two can never disagree.
+- Repayment is **structural, not promised**: the draw crystallizes accrual and subtracts from
+  `pendingBalance`, so your next `claim()` is automatically smaller. There is no debt record to
+  default on and nothing to collect.
+- **No credit check, no bureau, no employer guarantor, no KYC beyond the wallet you already have.**
+- The 0.5% access fee is **paid out of yield on the idle payroll float** — the employer's money
+  works while it waits, and covers the worker's fee. Every draw's fee/subsidy split is on-chain.
+
+Employers don't approve individual draws (that would reintroduce the guarantor model). They set
+an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — via `setPoolPolicy`.
+
+> **Honest limitation.** A pool's balance is shared across its recipients and Magmos does *not*
+> enforce that a pool is funded to cover every stream's full accrual — `claim()` already reverts
+> with `InsufficientPoolBalance` when a pool runs dry, first-come-first-served. Advances don't
+> create new insolvency risk, but they do **pull the timing of withdrawals forward**, which can
+> surface an underfunded pool sooner. `drawableAmount` is therefore capped by the pool's actual
+> balance, and the per-pool cap exists so an employer can bound this deliberately.
+
 ## Contracts (Arc testnet, chain `5042002`)
 
 | Contract | Address |
 |---|---|
-| MagmosPayroll | `0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093` |
+| MagmosPayroll | `0x23888C1556FF5ebbA045D979f56C1151D0D0af47` |
+| MagmosAdvance (earned wage access) | `0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4` |
 | MagmosRegistry | `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501` |
 | MagmosVault | `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322` |
 | MagmosYieldVault | `0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2` |

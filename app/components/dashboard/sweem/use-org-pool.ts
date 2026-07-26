@@ -13,10 +13,8 @@ import {
   getClaimable,
   getStream,
   getUsdcBalance,
-  getAdvanceAccount,
-  getDrawable,
+  getEmployeeSnapshots,
   type PoolSummary,
-  type StreamView,
 } from "@/lib/reads";
 import { monthlyRate } from "./helpers";
 
@@ -119,24 +117,19 @@ export function useOrgPool() {
     queryKey: ["orgPoolState", poolId, wallet],
     enabled: !!wallet,
     refetchInterval: 5000,
+    retry: 3,
+    placeholderData: (prev) => prev, // hold the last good snapshot through a transient RPC blip
     queryFn: async () => {
       const summary = await getPool(poolId);
       if (!summary.exists) {
         return { poolId, ...EMPTY, summary };
       }
 
+      // One multicall for the whole recipient fan-out — Arc's RPC rejects concurrent requests.
+      // Not individually caught: a rate-limited RPC must not render as real "0.00 streaming",
+      // so a failure rejects the query and react-query keeps the last good snapshot instead.
       const onChainEmps = await getEmployees(poolId);
-      const details = await Promise.all(
-        onChainEmps.map(async (addr) => {
-          const [claimable, stream, advance, drawable] = await Promise.all([
-            getClaimable(poolId, addr).catch(() => 0n),
-            getStream(poolId, addr).catch(() => null as StreamView | null),
-            getAdvanceAccount(poolId, addr).catch(() => null),
-            getDrawable(poolId, addr).catch(() => 0n),
-          ]);
-          return { addr, claimable, stream, advance, drawable };
-        })
-      );
+      const details = await getEmployeeSnapshots(poolId, onChainEmps);
 
       let monthlyRateRaw = 0n;
       let claimableRaw = 0n;

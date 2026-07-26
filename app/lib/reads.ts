@@ -19,10 +19,6 @@ import {
 export const publicClient = createPublicClient({
   chain: arcTestnet,
   transport: http(ARC_RPC_URL),
-  // Coalesce concurrent reads into multicall3 aggregates. The dashboard fans out per recipient
-  // (stream + claimable + advance account + drawable, ×N) every 5s; unbatched that trips the
-  // public Arc RPC's rate limit and reads silently degrade to zero.
-  batch: { multicall: { wait: 20 } },
 })
 
 export interface PoolSummary {
@@ -113,6 +109,45 @@ export async function getAdvanceStats(): Promise<AdvanceStats> {
 
 export const getSubsidyBalance = (token: Address) =>
   readAdvance<bigint>('subsidyBalance', [token])
+
+export interface EmployeeSnapshot {
+  addr: Address
+  claimable: bigint
+  stream: StreamView
+  advance: AdvanceAccount
+  drawable: bigint
+}
+
+/**
+ * Every per-recipient read for a pool, as ONE request.
+ *
+ * Arc's public RPC rejects concurrent requests outright ("request limit reached") — measured:
+ * a single eth_call succeeds while 12 in flight all fail in ~250ms. viem's `batch.multicall`
+ * transport option did not reliably coalesce them, so the fan-out is issued explicitly as a
+ * multicall3 aggregate instead. `allowFailure: false` keeps this honest: a genuine RPC failure
+ * rejects the query (react-query then holds the last good snapshot) rather than silently
+ * rendering 0.00 as if it were real payroll data.
+ */
+export async function getEmployeeSnapshots(
+  poolId: `0x${string}`,
+  employees: readonly Address[]
+): Promise<EmployeeSnapshot[]> {
+  if (employees.length === 0) return []
+  const contracts = employees.flatMap((addr) => [
+    { address: MAGMOS_PAYROLL, abi: PAYROLL_ABI, functionName: 'claimableAmount', args: [poolId, addr] },
+    { address: MAGMOS_PAYROLL, abi: PAYROLL_ABI, functionName: 'getStream', args: [poolId, addr] },
+    { address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'accountOf', args: [poolId, addr] },
+    { address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'drawableAmount', args: [poolId, addr] },
+  ])
+  const res = await publicClient.multicall({ contracts, allowFailure: false })
+  return employees.map((addr, i) => ({
+    addr,
+    claimable: res[i * 4] as bigint,
+    stream: res[i * 4 + 1] as StreamView,
+    advance: res[i * 4 + 2] as AdvanceAccount,
+    drawable: res[i * 4 + 3] as bigint,
+  }))
+}
 
 // ---- Payroll reads ----
 export async function getPool(poolId: `0x${string}`): Promise<PoolSummary> {
