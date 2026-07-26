@@ -31,6 +31,7 @@ import {
   stopStream,
 } from "@/lib/writes";
 import { useOrgPool, type RecipientRow } from "./use-org-pool";
+import { AdvanceExposureCard } from "./advance-exposure-card";
 import { LiveTicker } from "./live-ticker";
 import { ActionButton, Modal, ConnectGate } from "./ui";
 import { shortAddr, usdcFixed } from "./helpers";
@@ -263,6 +264,13 @@ export function PayrollScreen() {
         </div>
       </SweemCard>
 
+      {/* Earned wage access — exposure + who pays for it */}
+      <AdvanceExposureCard
+        advancedRaw={state.advancedRaw}
+        drawableNowRaw={state.drawableNowRaw}
+        workers={activeRecipients.length}
+      />
+
       {/* Streams table */}
       <SweemCard className="mt-4">
         <CardLabel>Active streams</CardLabel>
@@ -273,6 +281,7 @@ export function PayrollScreen() {
                 <th className="pb-2.5 font-medium">Recipient</th>
                 <th className="pb-2.5 font-medium">Monthly</th>
                 <th className="pb-2.5 font-medium">Streaming now</th>
+                <th className="pb-2.5 font-medium">Drawn early</th>
                 <th className="pb-2.5 font-medium">Status</th>
                 <th className="pb-2.5 text-right font-medium">Manage</th>
               </tr>
@@ -280,7 +289,7 @@ export function PayrollScreen() {
             <tbody>
               {state.recipients.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-[13px] text-[var(--sw-text-muted)]">
+                  <td colSpan={6} className="py-8 text-center text-[13px] text-[var(--sw-text-muted)]">
                     No recipients streaming yet.
                   </td>
                 </tr>
@@ -313,6 +322,19 @@ export function PayrollScreen() {
                           decimals={decimals}
                         />
                       )}
+                    </td>
+                    <td className="py-3.5 tabular-nums">
+                      {r.advancedRaw > 0n ? (
+                        <>
+                          <span className="text-[var(--sw-text)]">{usdcFixed(r.advancedRaw)}</span>{" "}
+                          <span className="text-[12px] text-[var(--sw-text-muted)]">USDC</span>
+                        </>
+                      ) : (
+                        <span className="text-[var(--sw-text-dim)]">—</span>
+                      )}
+                      <div className="text-[11.5px] text-[var(--sw-text-dim)]">
+                        {usdcFixed(r.drawableRaw)} available
+                      </div>
                     </td>
                     <td className="py-3.5">
                       <span

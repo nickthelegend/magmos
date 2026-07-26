@@ -1,5 +1,5 @@
 {
-  "MagmosPayroll": "0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093",
+  "MagmosPayroll": "0x23888C1556FF5ebbA045D979f56C1151D0D0af47",
   "MagmosRegistry": "0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501",
   "MagmosVault": "0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322",
   "MagmosYieldVault": "0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2",
@@ -9,5 +9,8 @@
   "note": "USDC points at MagmosUSDC (faucet-mintable test token) for open testing. Set to USDC_real for the official Circle-USDC run.",
   "chainId": 5042002,
   "deployer": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
-  "treasury": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226"
+  "treasury": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
+  "MagmosPayroll_v1_noEWA": "0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093",
+  "MagmosAdvance": "0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4",
+  "note2": "MagmosPayroll was redeployed to ship settleAdvance (Earned Wage Access). MagmosPayroll_v1_noEWA is the previous instance kept for provenance of earlier demo txs."
 }

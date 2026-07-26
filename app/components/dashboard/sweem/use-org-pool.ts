@@ -13,6 +13,8 @@ import {
   getClaimable,
   getStream,
   getUsdcBalance,
+  getAdvanceAccount,
+  getDrawable,
   type PoolSummary,
   type StreamView,
 } from "@/lib/reads";
@@ -29,6 +31,8 @@ export interface RecipientRow {
   paused: boolean;
   stopped: boolean;
   onChain: boolean; // has an on-chain stream in this pool
+  advancedRaw: bigint; // lifetime earned-wage advances taken by this recipient
+  drawableRaw: bigint; // what they could draw right now (live employer exposure)
 }
 
 export interface OrgPoolState {
@@ -43,6 +47,9 @@ export interface OrgPoolState {
   claimableRaw: bigint; // Σ per-recipient claimable (anchor)
   streamedRaw: bigint; // totalClaimed + claimable
   recipients: RecipientRow[];
+  // Earned Wage Access
+  advancedRaw: bigint; // Σ advances drawn against this pool, lifetime
+  drawableNowRaw: bigint; // Σ workers could draw right now — the live exposure number
 }
 
 const EMPTY: Omit<OrgPoolState, "poolId"> = {
@@ -55,6 +62,8 @@ const EMPTY: Omit<OrgPoolState, "poolId"> = {
   claimableRaw: 0n,
   streamedRaw: 0n,
   recipients: [],
+  advancedRaw: 0n,
+  drawableNowRaw: 0n,
 };
 
 const MONTH_S = 2_592_000n;
@@ -119,17 +128,21 @@ export function useOrgPool() {
       const onChainEmps = await getEmployees(poolId);
       const details = await Promise.all(
         onChainEmps.map(async (addr) => {
-          const [claimable, stream] = await Promise.all([
+          const [claimable, stream, advance, drawable] = await Promise.all([
             getClaimable(poolId, addr).catch(() => 0n),
             getStream(poolId, addr).catch(() => null as StreamView | null),
+            getAdvanceAccount(poolId, addr).catch(() => null),
+            getDrawable(poolId, addr).catch(() => 0n),
           ]);
-          return { addr, claimable, stream };
+          return { addr, claimable, stream, advance, drawable };
         })
       );
 
       let monthlyRateRaw = 0n;
       let claimableRaw = 0n;
-      const recipients: RecipientRow[] = details.map(({ addr, claimable, stream }) => {
+      let advancedRaw = 0n;
+      let drawableNowRaw = 0n;
+      const recipients: RecipientRow[] = details.map(({ addr, claimable, stream, advance, drawable }) => {
         const meta = metaByAddr[addr.toLowerCase()];
         const rateRaw = stream?.rateAmount ?? 0n;
         const ratePeriod = stream?.ratePeriod ?? MONTH_S;
@@ -137,6 +150,9 @@ export function useOrgPool() {
         const paused = !!stream && stream.pausedAt > 0n && !stopped;
         if (!stopped) monthlyRateRaw += toMonthlyRaw(rateRaw, ratePeriod);
         claimableRaw += claimable;
+        const advancedForRow = advance?.totalDrawn ?? 0n;
+        advancedRaw += advancedForRow;
+        drawableNowRaw += drawable;
         return {
           address: addr,
           name: meta?.name ?? "",
@@ -147,6 +163,8 @@ export function useOrgPool() {
           paused,
           stopped,
           onChain: !!stream && stream.exists,
+          advancedRaw: advancedForRow,
+          drawableRaw: drawable,
         };
       });
 
@@ -161,6 +179,8 @@ export function useOrgPool() {
         claimableRaw,
         streamedRaw: summary.totalClaimed + claimableRaw,
         recipients,
+        advancedRaw,
+        drawableNowRaw,
       };
     },
   });

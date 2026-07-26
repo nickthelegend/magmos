@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useState } from "react";
+import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -30,6 +30,8 @@ import { Icon } from "@/components/dashboard/icons";
 import { LiveTicker } from "./live-ticker";
 import { ActionButton, Modal, AmountField, ConnectGate } from "./ui";
 import { SendHomeCard } from "./send-home-card";
+import { AdvancePanel } from "./advance-panel";
+import { useTxRunner } from "./use-tx-runner";
 import { shortAddr } from "./helpers";
 
 const TOKEN: TokenConfig = TOKENS.USDC;
@@ -41,42 +43,6 @@ interface PoolView {
   stream: StreamView;
   org: string;
   orgName: string | null;
-}
-
-// Await a write-request config through wagmi and resolve when the receipt lands. Wraps
-// the sonner pending→success→error UX in one place so every action reads the same.
-function useTxRunner() {
-  const { writeContractAsync } = useWriteContract();
-  const [hash, setHash] = useState<`0x${string}` | undefined>();
-  const { isLoading: confirming } = useWaitForTransactionReceipt({ hash });
-
-  const run = useCallback(
-    async (
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      request: any,
-      messages: { pending: string; success: string },
-    ): Promise<boolean> => {
-      const id = toast.loading(messages.pending);
-      try {
-        const txHash = await writeContractAsync(request);
-        setHash(txHash);
-        toast.loading("Waiting for confirmation…", { id });
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
-        toast.success(messages.success, { id });
-        return true;
-      } catch (e) {
-        const msg = (e as { shortMessage?: string; message?: string }).shortMessage ??
-          (e as Error).message ?? "Transaction failed";
-        toast.error(msg, { id });
-        return false;
-      } finally {
-        setHash(undefined);
-      }
-    },
-    [writeContractAsync],
-  );
-
-  return { run, confirming };
 }
 
 /* ── Stream card ─────────────────────────────────────────────────────── */
@@ -232,6 +198,17 @@ function StreamCard({
           </ActionButton>
         </div>
       </div>
+
+      {/* Earned Wage Access: the same accrued pay, available before payday. */}
+      <AdvancePanel
+        poolId={poolId}
+        wallet={wallet}
+        claimableRaw={baseRaw}
+        onDrawn={async () => {
+          await claimQuery.refetch();
+          onClaimed();
+        }}
+      />
 
       <Modal
         open={saveOpen}

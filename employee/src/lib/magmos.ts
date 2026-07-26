@@ -6,6 +6,7 @@ import { encodeAbiParameters, keccak256 } from 'viem'
 import payrollAbi from './abi/MagmosPayroll.json'
 import registryAbi from './abi/MagmosRegistry.json'
 import vaultAbi from './abi/MagmosVault.json'
+import advanceAbi from './abi/MagmosAdvance.json'
 
 export const NETWORK = 'arc-testnet' as const
 
@@ -18,7 +19,10 @@ export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
 
 // ----- Deployed Magmos core (Arc testnet) -----
 export const MAGMOS_PAYROLL = (process.env.NEXT_PUBLIC_MAGMOS_PAYROLL ||
-  '0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093') as `0x${string}`
+  '0x23888C1556FF5ebbA045D979f56C1151D0D0af47') as `0x${string}`
+// Earned Wage Access module — draw wages already streamed-and-earned, before the claim.
+export const MAGMOS_ADVANCE = (process.env.NEXT_PUBLIC_MAGMOS_ADVANCE ||
+  '0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4') as `0x${string}`
 export const MAGMOS_REGISTRY = (process.env.NEXT_PUBLIC_MAGMOS_REGISTRY ||
   '0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501') as `0x${string}`
 export const MAGMOS_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_VAULT ||
@@ -27,6 +31,7 @@ export const MAGMOS_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_VAULT ||
 export const PAYROLL_ABI = payrollAbi as Abi
 export const REGISTRY_ABI = registryAbi as Abi
 export const VAULT_ABI = vaultAbi as Abi
+export const ADVANCE_ABI = advanceAbi as Abi
 
 // ----- Arc testnet tokens -----
 export const USDC = (process.env.NEXT_PUBLIC_USDC ||

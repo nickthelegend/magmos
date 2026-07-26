@@ -7,7 +7,15 @@
 //  - Amounts are raw 6-dec USDC (use toRaw from lib/tokens). ratePeriods are in SECONDS.
 
 import { erc20Abi, type Address } from 'viem'
-import { MAGMOS_PAYROLL, MAGMOS_VAULT, PAYROLL_ABI, VAULT_ABI, USDC } from './magmos'
+import {
+  MAGMOS_PAYROLL,
+  MAGMOS_VAULT,
+  MAGMOS_ADVANCE,
+  PAYROLL_ABI,
+  VAULT_ABI,
+  ADVANCE_ABI,
+  USDC,
+} from './magmos'
 
 // ---- ERC-20 (USDC) ----
 export const approveUsdc = (spender: Address, amount: bigint) =>
@@ -63,6 +71,17 @@ export const grantPoolRole = (poolId: `0x${string}`, account: Address, role: num
 // ---- Payroll (recipient) ----
 export const claim = (poolId: `0x${string}`) =>
   ({ address: MAGMOS_PAYROLL, abi: PAYROLL_ABI, functionName: 'claim', args: [poolId] }) as const
+
+// ---- Earned Wage Access (recipient) ----
+// Draws wages already accrued on the stream. Lands plain USDC in the worker's own wallet, exactly
+// like a claim — which is why the CCTP "send home" path needs no special casing for advances.
+export const drawAdvance = (poolId: `0x${string}`, amount: bigint) =>
+  ({
+    address: MAGMOS_ADVANCE,
+    abi: ADVANCE_ABI,
+    functionName: 'drawAdvance',
+    args: [poolId, amount],
+  }) as const
 
 // ---- Vault (recipient savings) ----
 export const createVault = (name: string) =>
