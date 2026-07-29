@@ -27,6 +27,14 @@ export function LiveTicker({
   const scale = 10n ** BigInt(Math.max(0, 9 - decimals));
   const [display, setDisplay] = useState(() => formatNano(baseRaw * scale));
 
+  // Respect prefers-reduced-motion: the number still updates from the on-chain poll, it just
+  // stops animating every frame. A continuously-churning balance is precisely the kind of motion
+  // that triggers vestibular discomfort.
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   useEffect(() => {
     const anchor = anchorAt ?? Date.now();
     let raf = 0;
@@ -35,11 +43,11 @@ export function LiveTicker({
       const accruedNano =
         active && periodMs > 0n ? (rateRaw * scale * elapsed) / periodMs : 0n;
       setDisplay(formatNano(baseRaw * scale + accruedNano));
-      if (active) raf = requestAnimationFrame(tick);
+      if (active && !reduceMotion) raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [baseRaw, rateRaw, periodMs, anchorAt, active, scale]);
+  }, [baseRaw, rateRaw, periodMs, anchorAt, active, scale, reduceMotion]);
 
   const [intPart, fracPart] = display.split(".");
 

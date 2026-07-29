@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "@wagmi/core";
 import { toast } from "sonner";
@@ -80,6 +80,25 @@ export function PayrollScreen() {
   const [sortKey, setSortKey] = useState<SortKey>("monthly");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // "/" jumps to search, Escape clears it. Cheap for a table an operator scans all day, and
+  // deliberately inert while typing in another field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.key === "Escape" && t === searchRef.current) {
+        setQuery("");
+        searchRef.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const decimals = token.decimals;
   const balance = fromRaw(token, state.balanceRaw);
@@ -403,10 +422,11 @@ export function PayrollScreen() {
             <label className="flex items-center gap-1.5 rounded-full border border-[var(--sw-border)] bg-[var(--sw-card-inset)] px-3 py-1.5 focus-within:border-[var(--sw-mint)]/60">
               <Search size={13} className="shrink-0 text-[var(--sw-text-dim)]" />
               <input
+                ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name or address"
-                aria-label="Search recipients"
+                placeholder="Search name or address    /"
+                aria-label="Search recipients — press slash to focus"
                 className="w-[168px] bg-transparent text-[12.5px] text-[var(--sw-text)] outline-none placeholder:text-[var(--sw-text-dim)]"
               />
             </label>

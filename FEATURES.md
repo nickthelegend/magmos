@@ -1,7 +1,9 @@
-# 50 additions — verification pass + feature build
+# 100 additions — two verification passes, an audit, and the feature build
 
 Everything below is implemented, typechecked, and covered by the automated verification harness
-(`node demo-recording/verify-all.mjs` → **39/39 green**) or by Foundry (**93 tests passing**).
+(`node demo-recording/verify-all.mjs` → **42/42 green**) or by Foundry (**93 tests passing**).
+
+Round 1 is items 1–50; the audit pass and round 2 are items 51–100, at the bottom.
 
 Three of these are **bug fixes for real defects found by verifying rather than assuming** — they are
 marked 🐛 and each one was breaking something a user would hit.
@@ -100,3 +102,92 @@ marked 🐛 and each one was breaking something a user would hit.
 - **One item was a harness bug, not an app bug**, and is recorded as such: the verification shim's
   fallback fetched Arc cross-origin from the page. A real wallet is an extension and is not subject
   to page CORS, so the harness was reporting its own artifact. Fixed in the harness.
+
+---
+
+# Round 2 — audit pass + 50 more (51–100)
+
+Verified by: **93 Foundry tests**, **42/42** harness checks, **0 lint errors and 0 warnings** across
+both apps, three production builds, and `bun run drift` clean.
+
+Items 51–78 are **fixes for real defects found by auditing**, not new surface. Where a fix was
+user-visible or a correctness hazard it says so.
+
+## Wrong-brand and dead-code defects (51–59)
+
+| # | What | Why it was a mistake |
+|---|---|---|
+| 51 | `/brand-asset` palette rebranded blue → `ORANGE_SCALE`. | The public brand-guidelines page advertised **"Magmos Blue 500 · #298DFF"**. The product is orange. A judge opening it saw the wrong brand. |
+| 52 | `MagmosMark` replaces `SuiMark`. | It rendered a **Sui droplet logo** — the predecessor chain — on the Magmos brand page. |
+| 53 | Brand CSS selectors renamed `.brand-sui-mark` → `.brand-magmos-mark`. | Renaming only the component would have left the styles silently unapplied. |
+| 54 | Brand copy + swatch corrected to `Magmos Orange 500 · #FF6A1A · PMS 1655 C`. | The spec sheet quoted blue CMYK/RGB/PMS values. |
+| 55 | `<Toaster>` mounted once at the **root** layout. | It only existed inside the dashboard and onboarding layouts, so **every toast on `/yield` and `/faucet` was silently dropped** — including error feedback. |
+| 56 | Removed the two nested `<Toaster>`s. | Two mounted Toasters double-fire every toast. |
+| 57 | Sweem's lime `rgba(196,245,107,α)` → orange across 7 files, alpha preserved. | A **green wash sat behind orange text** in 11 places, including the sidebar badge and dashboard pills. |
+| 58 | `minClaimRaw()` deleted from both apps. | It implemented the **old 10%-of-a-week claim floor** and contradicted the contract's flat `MIN_CLAIM_AMOUNT`. Dead today, a landmine the moment someone used it. |
+| 59 | `sweem-flow-card` class removed. | Applied to the stream card but defined in no stylesheet. |
+
+## React correctness (60–74)
+
+| # | What | Why it mattered |
+|---|---|---|
+| 60 | **`useSeededState`** — new primitive for "editable state seeded from data that arrives later". | The `useEffect(() => setName(org.name), [org.name])` idiom appeared in three settings forms. Because those queries refetch on an interval, it could **overwrite what the user was typing**. |
+| 61 | Settings: 3 setState-in-effect removed. | Cascading render per data resolution, plus the typing hazard above. |
+| 62 | Webhooks: 4 setState-in-effect removed (`useMounted` + render-time reset). | |
+| 63 | Webhooks: impure `Date.now()` during render removed. | Non-deterministic render output. |
+| 64 | Request-payment modal: switched to the existing `useMounted` hook. | The codebase already had a correct hook; this file re-implemented it wrongly. |
+| 65 | Onboarding wizard: step **derived** instead of synced. | There was a render where an already-onboarded user was shown "connect". |
+| 66 | Launch CTA: navigates from the mutation callback, with an error toast and `aria-busy`. | The effect version watched `isConnected`, so a wallet connecting **in another tab** could redirect you. |
+| 67 | Advance-policy modal: key-based remount rather than an effect. | Mine — same cascading-render defect I was fixing elsewhere. |
+| 68 | `yield-routing`: refs held in `useMemo`, not read from a ref during render. | Reading `ref.current` in the render phase is unsafe under concurrent rendering. |
+| 69 | `dotted-map`: false `useMemo` removed. | Its dependency array was **mutated after capture** by `addMarkers`, so the memo could observe a half-built array — and never hit anyway. |
+| 70 | Hero screenshot → `next/image` with `priority`. | It is the **LCP element**; now optimized, non-lazy, and layout-shift free. |
+| 71 | `next/image` for feature-card, integrations, services, yield-routing logos. | |
+| 72 | `invoices-screen`: stable `invoices` identity. | `data ?? []` made the metrics memo recompute every render, defeating itself. |
+| 73 | `aria-sort` moved onto the `<th>`; sort buttons got `aria-label`. | `aria-sort` is invalid on `role="button"` — screen readers got no sort state at all. |
+| 74 | Unescaped entity, dead `eslint-disable`s, and every unused import/var cleared. | Lint: **19 errors + 12 warnings → 0 + 0**. |
+
+## Stale-reference defects (75–78)
+
+| # | What |
+|---|---|
+| 75 | README quoted the **previous** payroll/advance addresses; `RUN`, `PITCH` and `ROADMAP` quoted the **original pre-EWA** payroll. All corrected. |
+| 76 | Test counts said 74 in four places; actual is 93. |
+| 77 | `/passkey` gasless toasts now carry the real tx hash and a **Receipt** link — the gasless path previously gave no way to verify a movement of your own pay. |
+| 78 | `deployments.json` gained an explicit `superseded` list, so old addresses are recorded as provenance rather than mistaken for current. |
+
+## New infrastructure (79–100)
+
+| # | What | Why |
+|---|---|---|
+| 79 | **GitHub Actions CI** — 4 jobs: Foundry build/test/fmt, both apps typecheck+lint, SDK build, and ABI/address/doc drift. | Every gate that must hold before submitting, enforced on push. |
+| 80 | **SECURITY.md** — trust model per contract, the on-chain invariants that back the EWA claims, and the known limitations stated plainly. | |
+| 81 | **LICENSE** (MIT) matching the contracts' SPDX headers. | The repo had none while every `.sol` declared MIT. |
+| 82 | **Root `package.json`** — `test:contracts`, `typecheck`, `lint`, `drift`, `verify`, `seed`. | |
+| 83 | **`bun run check`** — one command for the whole monorepo gate. | |
+| 84 | Root manifest is **deliberately dependency-free**, documented inline. | Installing at the root would create a parent lockfile, the exact thing `next.config.ts` pins `turbopack.root` against. Verified the app still builds and serves with it present. |
+| 85 | `sync-chain` now also rewrites the **SDK's** default advance address. | The published SDK hardcoded an address a redeploy invalidated. |
+| 86 | `sync-chain --check` fails when a doc quotes a **superseded** deployment. | This round's stale-address bugs become impossible to reintroduce. |
+| 87 | The guard is **precise**: negative lookahead so a 64-char tx hash's 40-hex prefix isn't mistaken for an address, and only tracked Magmos addresses are considered. | The first version false-positived on tx hashes and on Permit2/Circle addresses. |
+| 88 | Guard **tested in both directions** — injected a superseded address (caught, exit 1) and confirmed tx hashes are ignored. | A guard that has never failed is not known to work. |
+| 89 | Branded **404** for the org app. | Dashboard URLs are deep-linkable now, so a mistyped one is a plausible landing. |
+| 90 | Branded **404** for the recipient portal. | |
+| 91 | **Dashboard error boundary** — reassures that on-chain funds are untouched, offers retry, keeps the digest. | Next's default error screen on a payroll page reads like the money is gone. |
+| 92 | **`/api/health` for the recipient portal** (chain + contract bytecode), matching the org app. | |
+| 93 | **`prefers-reduced-motion`** respected by both live tickers — the value still updates from the poll, it just stops animating per frame. | A perpetually churning balance is exactly the motion that causes vestibular discomfort. |
+| 94 | **`/` focuses the streams search, `Esc` clears it** — inert while typing elsewhere. | |
+| 95 | **SUBMISSION.md** — every claim paired with the command that proves it. | |
+| 96 | Circle **product feedback** written honestly, including the RPC concurrency/log-range friction we had to engineer around and the USYC mintability gap. | |
+| 97 | Harness covers the recipient portal's health endpoint. | |
+| 98 | Harness asserts **both** 404s are branded and return HTTP 404 (not a soft 200). | |
+| 99 | Harness dwells for the chain poll on chain-backed routes. | Its screenshots were capturing empty shells and were useless as evidence. |
+| 100 | This document. | 100 items, with the mistakes named rather than quietly fixed. |
+
+## What is still not solved
+
+Unchanged from round 1, and worth repeating because it is the one thing a reviewer should press on:
+**pool coverage is observable, not enforced.** `poolLiability`, the coverage card, and
+`/api/orgs/[wallet]/solvency` make the gap visible and one click from fixed, but the contract still
+permits an underfunded pool and `claim()` will revert first-come-first-served. A reserve requirement
+or a cross-stream coverage invariant is the highest-value next work — see [SECURITY.md](SECURITY.md)
+and [ROADMAP.md](ROADMAP.md).

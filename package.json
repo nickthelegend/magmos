@@ -1,0 +1,18 @@
+{
+  "name": "magmos",
+  "private": true,
+  "description": "Real-time cross-border USDC payroll and earned wage access on Circle's Arc",
+  "license": "MIT",
+  "scripts": {
+    "test:contracts": "cd contracts && forge test",
+    "typecheck": "cd app && bunx tsc --noEmit && cd ../employee && bunx tsc --noEmit && cd ../sdk && bunx tsc --noEmit",
+    "lint": "cd app && bun run lint && cd ../employee && bun run lint",
+    "sync-chain": "node scripts/sync-chain.mjs",
+    "drift": "node scripts/sync-chain.mjs --check",
+    "dev": "echo 'Run each app in its own shell:  (cd app && PORT=3100 bun dev)   (cd employee && PORT=3001 bun dev)'",
+    "verify": "node demo-recording/verify-all.mjs",
+    "check": "bun run test:contracts && bun run typecheck && bun run lint && bun run drift",
+    "seed": "SKIP_API=1 ./scripts/seed-demo.sh"
+  },
+  "//": "Script-only manifest: deliberately has NO dependencies. Do not `bun install` here \u2014 a root lockfile confuses Turbopack's workspace-root inference (see app/next.config.ts)."
+}

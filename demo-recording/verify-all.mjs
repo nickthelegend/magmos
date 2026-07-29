@@ -151,6 +151,34 @@ if (!ONLY || ONLY === "api") {
     }
   }
 
+  // Recipient-portal readiness (parity with the org app).
+  try {
+    const r = await fetch(`${EMP}/api/health`);
+    const j = await r.json();
+    if (j.ok) pass("api", "emp /api/health", "all subsystems ok");
+    else
+      fail(
+        "api",
+        "emp /api/health",
+        Object.entries(j.checks ?? {}).filter(([, c]) => !c.ok).map(([k, c]) => `${k}: ${c.detail}`).join("; ").slice(0, 110)
+      );
+  } catch (e) {
+    fail("api", "emp /api/health", e.message.slice(0, 100));
+  }
+
+  // A missing route must render our branded 404, not Next's default or a 200.
+  for (const [label, base] of [["org", ORG], ["emp", EMP]]) {
+    try {
+      const r = await fetch(`${base}/definitely-not-a-real-route-xyz`);
+      const body = await r.text();
+      const branded = /isn.{0,3}t here|404/i.test(body);
+      if (r.status === 404 && branded) pass("api", `${label} 404 page`, "branded, HTTP 404");
+      else fail("api", `${label} 404 page`, `HTTP ${r.status}, branded=${branded}`);
+    } catch (e) {
+      fail("api", `${label} 404 page`, e.message.slice(0, 100));
+    }
+  }
+
   // RPC proxy health + the properties it exists to provide.
   for (const [label, base] of [["org", ORG], ["emp", EMP]]) {
     try {

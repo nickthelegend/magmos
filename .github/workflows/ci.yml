@@ -1,0 +1,73 @@
+name: CI
+
+# Every gate that must hold before this is submittable, in one place:
+# contracts compile + 93 tests, both apps typecheck + lint clean, and the generated
+# ABI/address artefacts match the recorded deployment (so a redeploy can't silently
+# leave the frontends pointing at dead contracts).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  contracts:
+    name: Contracts (Foundry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Build
+        working-directory: contracts
+        run: forge build --sizes
+      - name: Test
+        working-directory: contracts
+        run: forge test -vv
+      - name: Format check
+        working-directory: contracts
+        run: forge fmt --check src/MagmosAdvance.sol src/interfaces/IMagmosPayroll.sol
+
+  web:
+    name: Apps (typecheck + lint)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [app, employee]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        working-directory: ${{ matrix.app }}
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: ${{ matrix.app }}
+        run: bunx tsc --noEmit
+      - name: Lint
+        working-directory: ${{ matrix.app }}
+        run: bun run lint
+
+  sdk:
+    name: SDK build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - working-directory: sdk
+        run: bun install --frozen-lockfile && bun run build
+
+  drift:
+    name: ABI / address drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Build artefacts
+        working-directory: contracts
+        run: forge build
+      - name: Assert apps, SDK and docs match the deployment
+        run: node scripts/sync-chain.mjs --check
