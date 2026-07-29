@@ -16,9 +16,14 @@ import {
   USDC,
 } from './magmos'
 
+// In the browser, reads go through our own /api/rpc proxy: it caches, coalesces identical
+// concurrent calls into one upstream request, and retries Arc's 429s. On the server (and in Node
+// scripts) there is no origin to be relative to, so talk to Arc directly.
+const READ_RPC = typeof window === 'undefined' ? ARC_RPC_URL : '/api/rpc'
+
 export const publicClient = createPublicClient({
   chain: arcTestnet,
-  transport: http(ARC_RPC_URL),
+  transport: http(READ_RPC),
 })
 
 export interface PoolSummary {
