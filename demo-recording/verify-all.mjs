@@ -91,7 +91,9 @@ async function checkRoute(page, errors, area, base, path, mustInclude = []) {
   errors.length = 0;
   try {
     const res = await page.goto(base + path, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForTimeout(2600);
+    // Chain-backed pages anchor on a 5s poll; screenshots taken before the first one lands show
+    // an empty shell and are useless as evidence. Dwell long enough for real data on those.
+    await page.waitForTimeout(/\/dashboard|\/yield/.test(path) ? 9000 : 2600);
     const status = res?.status() ?? 0;
 
     // Deep-linking a gated route now resolves in place with a Connect prompt (no bounce to `/`).
