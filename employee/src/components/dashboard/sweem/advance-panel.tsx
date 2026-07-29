@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Zap } from "lucide-react";
-import type { Address } from "viem";
+import { isAddress, type Address } from "viem";
 
 import { TOKENS, toRaw, fromRaw, type TokenConfig } from "@/lib/tokens";
 import { EXPLORER_TX } from "@/lib/magmos";
 import { getAdvanceSnapshot, quoteAdvance, getAdvanceHistory } from "@/lib/reads";
-import { drawAdvance } from "@/lib/writes";
+import { drawAdvance, drawAdvanceTo } from "@/lib/writes";
 import { ActionButton, Modal, AmountField } from "./ui";
 import { useTxRunner } from "./use-tx-runner";
 
@@ -33,12 +33,18 @@ export function AdvancePanel({
   poolId,
   wallet,
   claimableRaw,
+  rateRaw,
+  ratePeriod,
+  streaming,
   disabled,
   onDrawn,
 }: {
   poolId: `0x${string}`;
   wallet: Address;
   claimableRaw: bigint;
+  rateRaw: bigint;
+  ratePeriod: bigint;
+  streaming: boolean;
   disabled?: boolean;
   onDrawn: () => void;
 }) {
@@ -46,6 +52,8 @@ export function AdvancePanel({
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
+  const [elsewhere, setElsewhere] = useState(false);
+  const [dest, setDest] = useState("");
 
   // Drawable is re-anchored on-chain every 5s. It is intentionally NOT interpolated like the
   // hero ticker: a spendable limit that drifts between the number you read and the number you
@@ -86,15 +94,32 @@ export function AdvancePanel({
   const unknown = !drawQuery.data;
   const canDraw = drawable > 0n && !off && !unknown;
 
+  // When there is nothing to draw yet, an ETA is far more useful than a flat zero.
+  const minDraw = drawQuery.data?.policy?.minDraw ?? 10_000n;
+  const secsToMin =
+    streaming && rateRaw > 0n && ratePeriod > 0n && drawable < minDraw
+      ? Number(((minDraw - drawable) * ratePeriod) / rateRaw) + 1
+      : 0;
+  const eta =
+    secsToMin <= 0
+      ? null
+      : secsToMin < 90
+        ? `about ${secsToMin}s`
+        : secsToMin < 5400
+          ? `about ${Math.round(secsToMin / 60)} min`
+          : `about ${Math.round(secsToMin / 3600)}h`;
+
   // Why the number is what it is — the caption changes meaning, not just wording.
   const caption = unknown
     ? "Checking what you have earned so far…"
     : off
       ? "Early access is turned off for this payroll."
-      : drawable === 0n
-        ? claimableRaw > 0n
+      : drawable < minDraw
+        ? claimableRaw > 0n && drawable === 0n
           ? "Your employer's pool is short right now — try again once it's topped up."
-          : "Nothing earned yet. This grows every second your stream runs."
+          : eta
+            ? `Your first draw unlocks in ${eta} — this grows every second your stream runs.`
+            : "Nothing earned yet. This grows every second your stream runs."
         : drawable < claimableRaw
           ? `Capped below your full balance by your employer's early-access limit.`
           : fullySubsidized
@@ -103,6 +128,7 @@ export function AdvancePanel({
 
   const raw = amount ? toRaw(TOKEN, Number(amount)) : 0n;
   const overDraw = raw > drawable;
+  const destOk = !elsewhere || (dest.trim() !== "" && isAddress(dest.trim()));
 
   const quoteQuery = useQuery({
     queryKey: ["drawQuote", poolId, raw.toString()],
@@ -112,16 +138,21 @@ export function AdvancePanel({
   const q = quoteQuery.data;
 
   async function handleDraw() {
-    if (!raw || overDraw) return;
+    if (!raw || overDraw || !destOk) return;
+    const to = elsewhere ? (dest.trim() as Address) : null;
     setBusy(true);
-    const ok = await run(drawAdvance(poolId, raw), {
+    const ok = await run(to ? drawAdvanceTo(poolId, raw, to) : drawAdvance(poolId, raw), {
       pending: "Sending your advance…",
-      success: `Drew ${usd(raw)} ${TOKEN.symbol} to your wallet`,
+      success: to
+        ? `Sent ${usd(raw)} ${TOKEN.symbol} to ${to.slice(0, 6)}…${to.slice(-4)}`
+        : `Drew ${usd(raw)} ${TOKEN.symbol} to your wallet`,
     });
     setBusy(false);
     if (ok) {
       setOpen(false);
       setAmount("");
+      setElsewhere(false);
+      setDest("");
       await Promise.all([drawQuery.refetch(), historyQuery.refetch()]);
       onDrawn();
     }
@@ -214,7 +245,7 @@ export function AdvancePanel({
             <ActionButton
               variant="primary"
               onClick={handleDraw}
-              disabled={working || !raw || overDraw}
+              disabled={working || !raw || overDraw || !destOk}
             >
               {working ? "Drawing…" : raw ? `Draw ${usd(raw)} ${TOKEN.symbol}` : "Draw"}
             </ActionButton>
@@ -258,6 +289,38 @@ export function AdvancePanel({
             </div>
           </dl>
         ) : null}
+
+        <label className="mt-4 flex items-start gap-2.5 text-[12.5px] text-[var(--sw-text-muted)]">
+          <input
+            type="checkbox"
+            checked={elsewhere}
+            onChange={(e) => setElsewhere(e.target.checked)}
+            className="mt-0.5 size-[15px] accent-[var(--sw-mint)]"
+          />
+          <span>
+            Send it straight somewhere else
+            <span className="mt-0.5 block text-[11.5px] text-[var(--sw-text-dim)]">
+              Skips a second transaction if the money is going onward anyway.
+            </span>
+          </span>
+        </label>
+
+        {elsewhere && (
+          <div className="mt-2">
+            <input
+              value={dest}
+              onChange={(e) => setDest(e.target.value)}
+              placeholder="0x… destination address"
+              aria-label="Destination address"
+              className="w-full rounded-xl border border-[var(--sw-border)] bg-[#1b1b1f] px-3 py-2.5 font-mono text-[12.5px] text-[var(--sw-text)] outline-none focus:border-[var(--sw-mint)]/60"
+            />
+            {dest.trim() !== "" && !isAddress(dest.trim()) && (
+              <p className="mt-1.5 text-[12px] font-medium text-[#ff794b]">
+                That is not a valid address — check it before sending.
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="sweem-hint">
           Drawn {TOKEN.symbol} lands in your wallet, so you can send it home or save it just like

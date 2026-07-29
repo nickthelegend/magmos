@@ -24,7 +24,10 @@ const READ_RPC = typeof window === 'undefined' ? ARC_RPC_URL : '/api/rpc'
 
 export const publicClient = createPublicClient({
   chain: arcTestnet,
-  transport: http(READ_RPC),
+  // Retry at the transport level: Arc answers a single call reliably but rejects bursts with a
+  // 429, and a server-side route (which cannot use the same-origin proxy) would otherwise turn a
+  // transient throttle into a 502. Cheap insurance — successful calls never pay for it.
+  transport: http(READ_RPC, { retryCount: 4, retryDelay: 250, timeout: 20_000 }),
 })
 
 export interface PoolSummary {

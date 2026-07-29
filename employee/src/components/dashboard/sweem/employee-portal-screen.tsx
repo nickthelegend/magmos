@@ -20,11 +20,12 @@ import {
   getPool,
   getStream,
   getClaimable,
+  getDrawable,
   getOwnerVaults,
   getVaultBalance,
   type StreamView,
 } from "@/lib/reads";
-import { claim, createVault, vaultDeposit, vaultWithdraw, approveUsdc } from "@/lib/writes";
+import { claim, createVault, vaultDeposit, vaultWithdraw, approveUsdc, claimMany } from "@/lib/writes";
 import { DashboardPageShell } from "@/components/dashboard/dashboard-screen";
 import { Icon } from "@/components/dashboard/icons";
 import { LiveTicker } from "./live-ticker";
@@ -204,6 +205,9 @@ function StreamCard({
         poolId={poolId}
         wallet={wallet}
         claimableRaw={baseRaw}
+        rateRaw={stream.rateAmount}
+        ratePeriod={stream.ratePeriod}
+        streaming={live}
         onDrawn={async () => {
           await claimQuery.refetch();
           onClaimed();
@@ -349,6 +353,7 @@ export function EmployeePortalScreen() {
   const { address, isConnected } = useAccount();
   const wallet = address as Address | undefined;
   const { run } = useTxRunner();
+  const [claimingAll, setClaimingAll] = useState(false);
   const [creatingVault, setCreatingVault] = useState(false);
 
   // Discover every pool the recipient has a stream in, then hydrate each with its
@@ -394,6 +399,43 @@ export function EmployeePortalScreen() {
     if (ok) await vaultQuery.refetch();
   }
 
+  // Totals across every employer, so a worker with more than one stream sees one number.
+  const poolIds = (poolsQuery.data ?? []).map((v) => v.poolId);
+  const totalsQuery = useQuery({
+    queryKey: ["earningTotals", wallet, poolIds.join(",")],
+    enabled: !!wallet && poolIds.length > 0,
+    refetchInterval: 10000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        poolIds.map(async (id) => ({
+          claimable: await getClaimable(id, wallet!).catch(() => 0n),
+          drawable: await getDrawable(id, wallet!).catch(() => 0n),
+        })),
+      );
+      return pairs.reduce(
+        (acc, p) => ({
+          claimable: acc.claimable + p.claimable,
+          drawable: acc.drawable + p.drawable,
+        }),
+        { claimable: 0n, drawable: 0n },
+      );
+    },
+  });
+
+  async function handleClaimAll() {
+    if (poolIds.length === 0) return;
+    setClaimingAll(true);
+    const ok = await run(claimMany(poolIds), {
+      pending: `Claiming from ${poolIds.length} employer${poolIds.length === 1 ? "" : "s"}…`,
+      success: "All available pay claimed",
+    });
+    setClaimingAll(false);
+    if (ok) {
+      await Promise.all([poolsQuery.refetch(), totalsQuery.refetch()]);
+    }
+  }
+
   if (!isConnected || !wallet) {
     return (
       <DashboardPageShell title="Recipient portal">
@@ -411,6 +453,51 @@ export function EmployeePortalScreen() {
       title="Recipient portal"
       subtitle="Claim your streamed salary per second and stash it in a personal savings vault."
     >
+      {/* Totals across employers — one number, plus one signature to take it all. */}
+      {pools.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4 rounded-[18px] border border-[var(--sw-border)] bg-[var(--sw-card)] px-5 py-4">
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+            <div>
+              <p className="text-[11.5px] uppercase tracking-[0.08em] text-[var(--sw-text-dim)]">
+                Claimable across {pools.length} employer{pools.length === 1 ? "" : "s"}
+              </p>
+              <p className="sweem-mono mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[var(--sw-text)]">
+                {fromRaw(TOKEN, totalsQuery.data?.claimable ?? 0n).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                <span className="ml-1.5 text-[12.5px] font-medium text-[var(--sw-text-dim)]">
+                  {TOKEN.symbol}
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[11.5px] uppercase tracking-[0.08em] text-[var(--sw-text-dim)]">
+                Available early
+              </p>
+              <p className="sweem-mono mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[var(--sw-mint)]">
+                {fromRaw(TOKEN, totalsQuery.data?.drawable ?? 0n).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                <span className="ml-1.5 text-[12.5px] font-medium text-[var(--sw-text-dim)]">
+                  {TOKEN.symbol}
+                </span>
+              </p>
+            </div>
+          </div>
+          {pools.length > 1 && (
+            <ActionButton
+              variant="primary"
+              onClick={handleClaimAll}
+              disabled={claimingAll || (totalsQuery.data?.claimable ?? 0n) === 0n}
+            >
+              {claimingAll ? "Claiming…" : "Claim from all"}
+            </ActionButton>
+          )}
+        </div>
+      )}
+
       {/* streams */}
       {poolsQuery.isLoading ? (
         <div className="sweem-card mt-5">

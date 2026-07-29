@@ -7,7 +7,15 @@
 //  - Amounts are raw 6-dec USDC (use toRaw from lib/tokens). ratePeriods are in SECONDS.
 
 import { erc20Abi, type Address } from 'viem'
-import { MAGMOS_PAYROLL, MAGMOS_VAULT, PAYROLL_ABI, VAULT_ABI, USDC } from './magmos'
+import {
+  MAGMOS_PAYROLL,
+  MAGMOS_VAULT,
+  MAGMOS_ADVANCE,
+  PAYROLL_ABI,
+  VAULT_ABI,
+  ADVANCE_ABI,
+  USDC,
+} from './magmos'
 
 // ---- ERC-20 (USDC) ----
 export const approveUsdc = (spender: Address, amount: bigint) =>
@@ -81,3 +89,44 @@ export const vaultDeposit = (vaultId: bigint, token: Address, amount: bigint) =>
 
 export const vaultWithdraw = (vaultId: bigint, token: Address, amount: bigint) =>
   ({ address: MAGMOS_VAULT, abi: VAULT_ABI, functionName: 'withdraw', args: [vaultId, token, amount] }) as const
+
+// ---- Batch stream control (one signature for a whole roster) ----
+export const pauseMany = (poolId: `0x${string}`, employees: Address[]) =>
+  ({
+    address: MAGMOS_PAYROLL,
+    abi: PAYROLL_ABI,
+    functionName: 'pauseMany',
+    args: [poolId, employees],
+  }) as const
+
+export const resumeMany = (poolId: `0x${string}`, employees: Address[]) =>
+  ({
+    address: MAGMOS_PAYROLL,
+    abi: PAYROLL_ABI,
+    functionName: 'resumeMany',
+    args: [poolId, employees],
+  }) as const
+
+// ---- Earned Wage Access (employer side) ----
+// The employer sets an exposure envelope once; they never approve individual draws.
+export const setPoolPolicy = (
+  poolId: `0x${string}`,
+  maxDrawBps: number,
+  minDraw: bigint,
+  disabled: boolean
+) =>
+  ({
+    address: MAGMOS_ADVANCE,
+    abi: ADVANCE_ABI,
+    functionName: 'setPoolPolicy',
+    args: [poolId, maxDrawBps, minDraw, disabled],
+  }) as const
+
+/** Park float yield to absorb workers' access fees. */
+export const fundSubsidy = (token: Address, amount: bigint) =>
+  ({
+    address: MAGMOS_ADVANCE,
+    abi: ADVANCE_ABI,
+    functionName: 'fundSubsidy',
+    args: [token, amount],
+  }) as const

@@ -36,9 +36,12 @@ const results = [];
 const pass = (area, name, note = "") => results.push({ area, name, ok: true, note });
 const fail = (area, name, note) => results.push({ area, name, ok: false, note });
 
+// The shim's fallback uses the app's OWN same-origin /api/rpc proxy rather than fetching Arc
+// directly. A real wallet is a browser extension and is not subject to page CORS; a page-level
+// fetch to Arc is, so hitting it here would report a harness artifact as an app failure.
 const inject = (addr) => `
 (() => {
-  const ADDR = ${JSON.stringify(addr)}, CHAIN = "0x4cef32", RPC = ${JSON.stringify(RPC)};
+  const ADDR = ${JSON.stringify(addr)}, CHAIN = "0x4cef32", RPC = "/api/rpc";
   const L = {};
   async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:m,params:p||[]})});const j=await r.json();if(j.error)throw Object.assign(new Error(j.error.message),{code:j.error.code});return j.result;}
   window.ethereum = { isMetaMask:true, request: async ({method,params}) => {
@@ -125,6 +128,9 @@ if (!ONLY || ONLY === "api") {
     `/api/orgs/${deployer.address}/keys`,
     `/api/orgs/${deployer.address}/pools`,
     `/api/orgs/${deployer.address}/webhooks`,
+    `/api/orgs/${deployer.address}/solvency`,
+    `/api/orgs/${deployer.address}/advances?windows=2`,
+    `/api/health`,
   ];
   for (const p of apiPaths) {
     try {
@@ -132,9 +138,12 @@ if (!ONLY || ONLY === "api") {
       const txt = await r.text();
       let parsed = true;
       try { JSON.parse(txt); } catch { parsed = false; }
-      if (!r.ok) fail("api", p, `HTTP ${r.status}`);
+      const body = parsed ? JSON.parse(txt) : null;
+      if (!r.ok) fail("api", p, `HTTP ${r.status}${body?.error ? ` — ${String(body.error).slice(0, 70)}` : ""}`);
       else if (!parsed) fail("api", p, "non-JSON body");
-      else pass("api", p, `HTTP ${r.status}`);
+      else if (p === "/api/health" && body?.ok !== true)
+        fail("api", p, Object.entries(body?.checks ?? {}).filter(([, c]) => !c.ok).map(([k, c]) => `${k}: ${c.detail}`).join("; ").slice(0, 110));
+      else pass("api", p, p === "/api/health" ? "all subsystems ok" : `HTTP ${r.status}`);
     } catch (e) {
       fail("api", p, e.message.slice(0, 100));
     }

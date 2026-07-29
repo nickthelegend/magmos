@@ -68,6 +68,8 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
     mapping(bytes32 poolId => PoolPolicy) private _policies;
     mapping(bytes32 poolId => mapping(address worker => Account)) private _accounts;
     mapping(bytes32 poolId => uint256 drawn) public poolTotalDrawn;
+    mapping(bytes32 poolId => uint256 fees) public poolFeesCharged;
+    mapping(bytes32 poolId => uint256 fees) public poolFeesSubsidized;
 
     /// @notice Yield parked here to absorb access fees, per token.
     mapping(address token => uint256) public subsidyBalance;
@@ -105,6 +107,7 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
     error NotOrg();
     error ZeroAmount();
     error InsufficientSubsidy();
+    error ZeroAddress();
 
     constructor(address payroll_, address registry_, address owner_) Ownable(owner_) {
         payroll = IMagmosPayroll(payroll_);
@@ -126,6 +129,34 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
     function drawAdvance(bytes32 poolId, uint256 amount)
         external
         nonReentrant
+        returns (uint256 netToWorker)
+    {
+        return _draw(poolId, amount, msg.sender);
+    }
+
+    /// @notice Draw earned pay straight to another address — a bridge, an exchange, family.
+    /// @dev Saves the worker a second transaction (and a second gas payment) when the money is
+    ///      going somewhere else anyway. The draw is still charged against THEIR stream only.
+    function drawAdvanceTo(bytes32 poolId, uint256 amount, address to)
+        external
+        nonReentrant
+        returns (uint256 netToWorker)
+    {
+        if (to == address(0)) revert ZeroAddress();
+        return _draw(poolId, amount, to);
+    }
+
+    /// @notice Draw everything currently available, without having to read the limit first.
+    function drawMax(bytes32 poolId) external nonReentrant returns (uint256 netToWorker) {
+        PoolPolicy memory pol = policyOf(poolId);
+        if (pol.disabled) revert AdvancesDisabled();
+        uint256 limit = _drawable(poolId, msg.sender, pol);
+        if (limit < pol.minDraw || limit == 0) revert NothingDrawable();
+        return _draw(poolId, limit, msg.sender);
+    }
+
+    function _draw(bytes32 poolId, uint256 amount, address to)
+        internal
         returns (uint256 netToWorker)
     {
         if (amount == 0) revert ZeroAmount();
@@ -156,6 +187,8 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
             ++acct.drawCount;
         }
         poolTotalDrawn[poolId] += amount;
+        poolFeesCharged[poolId] += fee;
+        poolFeesSubsidized[poolId] += subsidized;
         totalAdvanced += amount;
         totalFeesCharged += fee;
         totalFeesSubsidized += subsidized;
@@ -165,7 +198,7 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
         // Authoritative check + settlement: reverts unless `amount` is genuinely earned.
         uint256 remaining = payroll.settleAdvance(poolId, msg.sender, amount, address(this));
 
-        IERC20(token).safeTransfer(msg.sender, netToWorker);
+        IERC20(token).safeTransfer(to, netToWorker);
         if (fee > 0) {
             IERC20(token).safeTransfer(registry.treasury(), fee);
         }
@@ -284,6 +317,32 @@ contract MagmosAdvance is ReentrancyGuard, Ownable {
             }
         }
         lifetimeDrawn = poolTotalDrawn[poolId];
+    }
+
+    /// @notice Drawable for many workers at once — one RPC round trip for a whole roster.
+    function drawableBatch(bytes32 poolId, address[] calldata workers)
+        external
+        view
+        returns (uint256[] memory out)
+    {
+        PoolPolicy memory pol = policyOf(poolId);
+        out = new uint256[](workers.length);
+        if (pol.disabled) return out;
+        for (uint256 i; i < workers.length; ++i) {
+            out[i] = _drawable(poolId, workers[i], pol);
+        }
+    }
+
+    /// @notice Per-pool EWA economics, so an employer sees their own numbers rather than global.
+    function poolStats(bytes32 poolId)
+        external
+        view
+        returns (uint256 drawn, uint256 feesCharged, uint256 feesSubsidized, uint256 feesOnWorkers)
+    {
+        drawn = poolTotalDrawn[poolId];
+        feesCharged = poolFeesCharged[poolId];
+        feesSubsidized = poolFeesSubsidized[poolId];
+        feesOnWorkers = feesCharged - feesSubsidized;
     }
 
     /// @notice Protocol-wide EWA stats for the "yield covers the fee" breakdown.

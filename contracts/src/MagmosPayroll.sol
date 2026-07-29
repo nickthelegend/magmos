@@ -197,20 +197,57 @@ contract MagmosPayroll is ReentrancyGuard {
     /// @notice Claim all accrued pay from the caller's stream on `poolId`. Transfers to the caller.
     /// @return claimable The amount transferred.
     function claim(bytes32 poolId) external nonReentrant returns (uint256 claimable) {
+        return _claim(poolId, msg.sender, true);
+    }
+
+    /// @notice Claim to a different address — e.g. straight to a savings vault or a bridge.
+    function claimTo(bytes32 poolId, address to) external nonReentrant returns (uint256 claimable) {
+        if (to == address(0)) revert ZeroAddress();
+        return _claim(poolId, to, true);
+    }
+
+    /// @notice Claim from several pools in one transaction (a recipient with multiple employers).
+    /// @dev Non-strict per pool: a pool that has nothing claimable is skipped rather than
+    ///      reverting the whole batch. Reverts only if every pool yielded nothing.
+    function claimMany(bytes32[] calldata poolIds) external nonReentrant returns (uint256 total) {
+        for (uint256 i; i < poolIds.length; ++i) {
+            total += _claim(poolIds[i], msg.sender, false);
+        }
+        if (total == 0) revert ZeroClaimable();
+    }
+
+    /// @dev Shared claim path. `strict` reverts with the precise reason (single-pool calls);
+    ///      non-strict returns 0 so a batch can skip pools that are not ready.
+    function _claim(bytes32 poolId, address to, bool strict) internal returns (uint256 claimable) {
         Pool storage pool = _pools[poolId];
-        if (!pool.exists) revert PoolNotFound();
+        if (!pool.exists) {
+            if (strict) revert PoolNotFound();
+            return 0;
+        }
         Stream storage s = _streams[poolId][msg.sender];
-        if (!s.exists) revert StreamNotFound();
+        if (!s.exists) {
+            if (strict) revert StreamNotFound();
+            return 0;
+        }
 
         uint64 effEnd = _effectiveEnd(s);
         claimable = s.pendingBalance + _accrued(s, effEnd);
-        if (claimable == 0) revert ZeroClaimable();
+        if (claimable == 0) {
+            if (strict) revert ZeroClaimable();
+            return 0;
+        }
 
         // Min-claim floor (anti-dust). Bypassed when crystallized `pendingBalance` exists so a
         // rate change never locks earned pay.
-        if (claimable < MIN_CLAIM_AMOUNT && s.pendingBalance == 0) revert BelowMinClaim();
+        if (claimable < MIN_CLAIM_AMOUNT && s.pendingBalance == 0) {
+            if (strict) revert BelowMinClaim();
+            return 0;
+        }
 
-        if (pool.balance < claimable) revert InsufficientPoolBalance();
+        if (pool.balance < claimable) {
+            if (strict) revert InsufficientPoolBalance();
+            return 0;
+        }
 
         // effects (checks-effects-interactions + nonReentrant)
         pool.totalClaimed += claimable;
@@ -221,7 +258,7 @@ contract MagmosPayroll is ReentrancyGuard {
 
         emit FundsClaimed(poolId, msg.sender, claimable, block.timestamp);
 
-        IERC20(pool.token).safeTransfer(msg.sender, claimable);
+        IERC20(pool.token).safeTransfer(to, claimable);
     }
 
     /// @notice Settle `amount` of an employee's ALREADY-EARNED pay early (earned-wage advance),
@@ -295,6 +332,34 @@ contract MagmosPayroll is ReentrancyGuard {
         emit StreamResumed(poolId, employee, block.timestamp);
     }
 
+    /// @notice Pause several streams in one transaction (e.g. an end-of-contract batch).
+    function pauseMany(bytes32 poolId, address[] calldata employees) external {
+        Pool storage pool = _pools[poolId];
+        if (!pool.exists) revert PoolNotFound();
+        if (!_hasPoolRole(poolId, pool, msg.sender, PAUSER_ROLE)) revert NotAuthorized();
+        for (uint256 i; i < employees.length; ++i) {
+            Stream storage s = _streams[poolId][employees[i]];
+            // Skip anything already inactive so one bad entry cannot fail the batch.
+            if (!s.exists || s.pausedAt != 0 || s.stoppedAt != 0) continue;
+            s.pausedAt = uint64(block.timestamp);
+            emit StreamPaused(poolId, employees[i], block.timestamp);
+        }
+    }
+
+    /// @notice Resume several paused streams in one transaction.
+    function resumeMany(bytes32 poolId, address[] calldata employees) external {
+        Pool storage pool = _pools[poolId];
+        if (!pool.exists) revert PoolNotFound();
+        if (!_hasPoolRole(poolId, pool, msg.sender, PAUSER_ROLE)) revert NotAuthorized();
+        for (uint256 i; i < employees.length; ++i) {
+            Stream storage s = _streams[poolId][employees[i]];
+            if (!s.exists || s.pausedAt == 0) continue;
+            s.totalPausedSecs += uint64(block.timestamp) - s.pausedAt;
+            s.pausedAt = 0;
+            emit StreamResumed(poolId, employees[i], block.timestamp);
+        }
+    }
+
     /// @notice Permanently stop a stream. Accrued-but-unclaimed pay remains claimable.
     function stopStream(bytes32 poolId, address employee) external {
         Pool storage pool = _pools[poolId];
@@ -338,6 +403,60 @@ contract MagmosPayroll is ReentrancyGuard {
         Stream storage s = _streams[poolId][employee];
         if (!s.exists) return 0;
         return s.pendingBalance + _accrued(s, _effectiveEnd(s));
+    }
+
+    /// @notice What the pool currently owes across EVERY stream, versus what is actually funded.
+    /// @dev The contract does not enforce that a pool covers total accrual — `claim()` simply
+    ///      reverts `InsufficientPoolBalance` when it runs dry, first-come-first-served. That
+    ///      exposure is real, so it is made *observable* here rather than left implicit: an
+    ///      employer (or the dashboard) can read the shortfall and top up before anyone is
+    ///      unable to claim. Early-wage draws do not create this risk but do surface it sooner.
+    /// @return accrued Sum of every stream's claimable (crystallized + streaming).
+    /// @return balance Liquidity held for the pool right now.
+    /// @return shortfall `accrued - balance`, or 0 when fully covered.
+    function poolLiability(bytes32 poolId)
+        external
+        view
+        returns (uint256 accrued, uint256 balance, uint256 shortfall)
+    {
+        Pool storage p = _pools[poolId];
+        if (!p.exists) revert PoolNotFound();
+        address[] storage list = _employeeList[poolId];
+        for (uint256 i; i < list.length; ++i) {
+            Stream storage s = _streams[poolId][list[i]];
+            if (!s.exists) continue;
+            accrued += s.pendingBalance + _accrued(s, _effectiveEnd(s));
+        }
+        balance = p.balance;
+        shortfall = accrued > balance ? accrued - balance : 0;
+    }
+
+    /// @notice Amount the org must deposit for the pool to cover all accrued pay right now.
+    function requiredTopUp(bytes32 poolId) external view returns (uint256) {
+        Pool storage p = _pools[poolId];
+        if (!p.exists) revert PoolNotFound();
+        uint256 accrued;
+        address[] storage list = _employeeList[poolId];
+        for (uint256 i; i < list.length; ++i) {
+            Stream storage s = _streams[poolId][list[i]];
+            if (!s.exists) continue;
+            accrued += s.pendingBalance + _accrued(s, _effectiveEnd(s));
+        }
+        return accrued > p.balance ? accrued - p.balance : 0;
+    }
+
+    /// @notice Claimable for many employees at once (one RPC round trip for a whole roster).
+    function claimableBatch(bytes32 poolId, address[] calldata employees)
+        external
+        view
+        returns (uint256[] memory out)
+    {
+        out = new uint256[](employees.length);
+        for (uint256 i; i < employees.length; ++i) {
+            Stream storage s = _streams[poolId][employees[i]];
+            if (!s.exists) continue;
+            out[i] = s.pendingBalance + _accrued(s, _effectiveEnd(s));
+        }
     }
 
     function getPool(bytes32 poolId)

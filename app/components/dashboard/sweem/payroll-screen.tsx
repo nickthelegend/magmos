@@ -14,7 +14,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
-import { Coins, Pause, Play, Square, Plus } from "lucide-react";
+import {Coins, Pause, Play, Square, Plus, Search, Download, ArrowUpDown, Sliders, Copy } from "lucide-react";
 import type { Address } from "viem";
 
 import { CardLabel, IconChip, MoneyValue, SweemCard } from "@/components/sweem-ui/primitives";
@@ -23,20 +23,22 @@ import { cn } from "@/lib/utils";
 import { fromRaw, toRaw } from "@/lib/tokens";
 import { wagmiConfig } from "@/lib/wagmi";
 import { EXPLORER_TX, MAGMOS_PAYROLL } from "@/lib/magmos";
-import {
-  approveUsdc,
+import {approveUsdc,
   topup,
   pauseStream,
   resumeStream,
-  stopStream,
-} from "@/lib/writes";
+  stopStream, pauseMany, resumeMany } from "@/lib/writes";
 import { useOrgPool, type RecipientRow } from "./use-org-pool";
 import { AdvanceExposureCard } from "./advance-exposure-card";
+import { CoverageCard } from "./coverage-card";
+import { AdvancePolicyModal } from "./advance-policy-modal";
 import { LiveTicker } from "./live-ticker";
 import { ActionButton, Modal, ConnectGate } from "./ui";
 import { shortAddr, usdcFixed } from "./helpers";
 
 const MONTH_S = 2_592_000n;
+
+type SortKey = "name" | "monthly" | "streaming" | "advanced";
 
 // Monthly USDC for a recipient: prefer the live on-chain rate normalized to a
 // month, fall back to the metadata target salary.
@@ -73,6 +75,11 @@ export function PayrollScreen() {
 
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupAmt, setTopupAmt] = useState("");
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("monthly");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const decimals = token.decimals;
   const balance = fromRaw(token, state.balanceRaw);
@@ -96,6 +103,104 @@ export function PayrollScreen() {
         .slice(0, 8),
     [activeRecipients, decimals]
   );
+
+  // Search + sort are client-side: the whole roster is already in memory from one multicall,
+  // so filtering here costs nothing and avoids another round trip per keystroke.
+  const visibleRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = q
+      ? state.recipients.filter(
+          (r) => r.name.toLowerCase().includes(q) || r.address.toLowerCase().includes(q)
+        )
+      : state.recipients.slice();
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      if (sortKey === "name") {
+        return dir * (a.name || a.address).localeCompare(b.name || b.address);
+      }
+      if (sortKey === "monthly") return dir * (rowMonthly(a, decimals) - rowMonthly(b, decimals));
+      if (sortKey === "advanced") return dir * (Number(a.advancedRaw) - Number(b.advancedRaw));
+      return dir * (Number(a.claimableRaw) - Number(b.claimableRaw));
+    });
+    return rows;
+  }, [state.recipients, query, sortKey, sortDir, decimals]);
+
+  const selectedRows = visibleRows.filter((r) => selected.has(r.address));
+  const allVisibleSelected = visibleRows.length > 0 && selectedRows.length === visibleRows.length;
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
+
+  function toggleSelect(addr: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(addr)) next.delete(addr);
+      else next.add(addr);
+      return next;
+    });
+  }
+
+  async function copyAddr(addr: string) {
+    try {
+      await navigator.clipboard.writeText(addr);
+      toast.success("Address copied");
+    } catch {
+      toast.error("Couldn't copy address");
+    }
+  }
+
+  // Export exactly what is on screen (respects the current search + sort), so a finance team can
+  // reconcile the same view they are looking at.
+  function exportCsv() {
+    const head = [
+      "name",
+      "address",
+      "monthly_usdc",
+      "claimable_usdc",
+      "advanced_usdc",
+      "drawable_now_usdc",
+      "status",
+    ];
+    const lines = visibleRows.map((r) =>
+      [
+        `"${(r.name || "Recipient").replace(/"/g, '""')}"`,
+        r.address,
+        rowMonthly(r, decimals).toFixed(2),
+        usdcFixed(r.claimableRaw),
+        usdcFixed(r.advancedRaw),
+        usdcFixed(r.drawableRaw),
+        r.stopped ? "stopped" : r.paused ? "paused" : "streaming",
+      ].join(",")
+    );
+    const csv = [head.join(","), ...lines].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `magmos-payroll-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${visibleRows.length} row${visibleRows.length === 1 ? "" : "s"}`);
+  }
+
+  async function batchControl(kind: "pause" | "resume") {
+    const addrs = selectedRows
+      .filter((r) => !r.stopped && (kind === "pause" ? !r.paused : r.paused))
+      .map((r) => r.address as Address);
+    if (addrs.length === 0) {
+      toast.message(`Nothing to ${kind}`, { description: "No selected stream is in that state." });
+      return;
+    }
+    await act(
+      `${kind} ${addrs.length} stream${addrs.length === 1 ? "" : "s"}`,
+      () => (kind === "pause" ? pauseMany(poolId, addrs) : resumeMany(poolId, addrs))
+    );
+    setSelected(new Set());
+  }
 
   function refresh() {
     stateQuery.refetch();
@@ -275,6 +380,14 @@ export function PayrollScreen() {
         </div>
       </SweemCard>
 
+      {/* Coverage first: whether the pool can actually pay what has been earned. */}
+      <CoverageCard
+        poolId={poolId}
+        wallet={wallet as `0x${string}`}
+        walletBalanceRaw={usdcBalanceRaw}
+        onFunded={refresh}
+      />
+
       {/* Earned wage access — exposure + who pays for it */}
       <AdvanceExposureCard
         advancedRaw={state.advancedRaw}
@@ -284,28 +397,93 @@ export function PayrollScreen() {
 
       {/* Streams table */}
       <SweemCard className="mt-4">
-        <CardLabel>Active streams</CardLabel>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardLabel>Active streams</CardLabel>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 rounded-full border border-[var(--sw-border)] bg-[var(--sw-card-inset)] px-3 py-1.5 focus-within:border-[var(--sw-mint)]/60">
+              <Search size={13} className="shrink-0 text-[var(--sw-text-dim)]" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name or address"
+                aria-label="Search recipients"
+                className="w-[168px] bg-transparent text-[12.5px] text-[var(--sw-text)] outline-none placeholder:text-[var(--sw-text-dim)]"
+              />
+            </label>
+            <ActionButton onClick={exportCsv} disabled={visibleRows.length === 0}>
+              <span className="inline-flex items-center gap-1.5"><Download size={14} /> CSV</span>
+            </ActionButton>
+            <ActionButton onClick={() => setPolicyOpen(true)}>
+              <span className="inline-flex items-center gap-1.5"><Sliders size={14} /> Early access</span>
+            </ActionButton>
+          </div>
+        </div>
+
+        {/* Batch bar — appears only when a selection exists, so it never occupies idle space. */}
+        {selectedRows.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--sw-border)] bg-[var(--sw-card-inset)] px-3.5 py-2.5">
+            <span className="text-[12.5px] text-[var(--sw-text-muted)]">
+              <span className="font-semibold text-[var(--sw-text)]">{selectedRows.length}</span>{" "}
+              selected
+            </span>
+            <span className="flex items-center gap-2">
+              <ActionButton onClick={() => batchControl("pause")} disabled={busy}>
+                <span className="inline-flex items-center gap-1.5"><Pause size={13} /> Pause</span>
+              </ActionButton>
+              <ActionButton onClick={() => batchControl("resume")} disabled={busy}>
+                <span className="inline-flex items-center gap-1.5"><Play size={13} /> Resume</span>
+              </ActionButton>
+              <ActionButton onClick={() => setSelected(new Set())} disabled={busy}>
+                Clear
+              </ActionButton>
+            </span>
+          </div>
+        )}
+
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse">
             <thead>
               <tr className="border-b border-[var(--sw-border)] text-left text-[11px] uppercase tracking-wide text-[var(--sw-text-dim)]">
-                <th className="pb-2.5 font-medium">Recipient</th>
-                <th className="pb-2.5 font-medium">Monthly</th>
-                <th className="pb-2.5 font-medium">Streaming now</th>
-                <th className="pb-2.5 font-medium">Drawn early</th>
+                <th className="w-8 pb-2.5 font-medium">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible recipients"
+                    checked={allVisibleSelected}
+                    onChange={() =>
+                      setSelected(
+                        allVisibleSelected ? new Set() : new Set(visibleRows.map((r) => r.address))
+                      )
+                    }
+                    className="size-[14px] accent-[var(--sw-mint)]"
+                  />
+                </th>
+                <th className="pb-2.5 font-medium">
+                  <SortHeader label="Recipient" col="name" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                </th>
+                <th className="pb-2.5 font-medium">
+                  <SortHeader label="Monthly" col="monthly" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                </th>
+                <th className="pb-2.5 font-medium">
+                  <SortHeader label="Streaming now" col="streaming" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                </th>
+                <th className="pb-2.5 font-medium">
+                  <SortHeader label="Drawn early" col="advanced" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                </th>
                 <th className="pb-2.5 font-medium">Status</th>
                 <th className="pb-2.5 text-right font-medium">Manage</th>
               </tr>
             </thead>
             <tbody>
-              {state.recipients.length === 0 && (
+              {visibleRows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-[13px] text-[var(--sw-text-muted)]">
-                    No recipients streaming yet.
+                  <td colSpan={7} className="py-8 text-center text-[13px] text-[var(--sw-text-muted)]">
+                    {query
+                      ? `No recipient matches “${query}”.`
+                      : "No recipients streaming yet."}
                   </td>
                 </tr>
               )}
-              {state.recipients.map((r) => {
+              {visibleRows.map((r) => {
                 const mo = rowMonthly(r, decimals);
                 const status = r.stopped ? "Stopped" : r.paused ? "Paused" : "Streaming";
                 return (
@@ -316,8 +494,25 @@ export function PayrollScreen() {
                     className="border-b border-[var(--sw-border)] last:border-0"
                   >
                     <td className="py-3.5">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${r.name || r.address}`}
+                        checked={selected.has(r.address)}
+                        onChange={() => toggleSelect(r.address)}
+                        className="size-[14px] accent-[var(--sw-mint)]"
+                      />
+                    </td>
+                    <td className="py-3.5">
                       <div className="font-medium text-[var(--sw-text)]">{r.name || "Recipient"}</div>
-                      <div className="text-[12px] text-[var(--sw-text-muted)]">{shortAddr(r.address)}</div>
+                      <button
+                        type="button"
+                        onClick={() => copyAddr(r.address)}
+                        title="Copy full address"
+                        className="group inline-flex items-center gap-1 text-[12px] text-[var(--sw-text-muted)] transition-colors hover:text-[var(--sw-mint)]"
+                      >
+                        {shortAddr(r.address)}
+                        <Copy size={11} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                      </button>
                     </td>
                     <td className="py-3.5 tabular-nums text-[var(--sw-text)]">{mo.toFixed(2)} <span className="text-[12px] text-[var(--sw-text-muted)]">USDC</span></td>
                     <td className="py-3.5 tabular-nums font-semibold text-[var(--sw-mint)]">
@@ -440,6 +635,49 @@ export function PayrollScreen() {
           Adds liquidity to the streaming pool so payroll keeps flowing. Approve then top up — two quick signatures on Arc.
         </p>
       </Modal>
+
+      <AdvancePolicyModal
+        open={policyOpen}
+        onClose={() => setPolicyOpen(false)}
+        poolId={poolId}
+        wallet={wallet as `0x${string}`}
+        onSaved={refresh}
+      />
     </div>
+  );
+}
+
+/** Column header that doubles as a sort toggle, with the active direction shown. */
+function SortHeader({
+  label,
+  col,
+  active,
+  dir,
+  onSort,
+}: {
+  label: string;
+  col: SortKey;
+  active: SortKey;
+  dir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+}) {
+  const on = active === col;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      className={cn(
+        "inline-flex items-center gap-1 uppercase tracking-wide transition-colors",
+        on ? "text-[var(--sw-mint)]" : "text-[var(--sw-text-dim)] hover:text-[var(--sw-text-muted)]"
+      )}
+    >
+      {label}
+      {on ? (
+        <span aria-hidden="true" className="text-[9px]">{dir === "asc" ? "▲" : "▼"}</span>
+      ) : (
+        <ArrowUpDown size={10} className="opacity-50" />
+      )}
+    </button>
   );
 }

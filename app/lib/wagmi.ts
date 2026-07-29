@@ -23,11 +23,18 @@ export const arcTestnet = defineChain({
   testnet: true,
 })
 
+// wagmi's public reads (useReadContract, waitForTransactionReceipt, estimateGas) travel over this
+// transport. Pointed straight at Arc it fetches cross-origin from the browser, which the node
+// rejects with CORS *and* counts against its per-IP concurrency limit. Same-origin /api/rpc solves
+// both: it is allow-listed to read-only methods, cached, and coalesced. Signing is unaffected —
+// that always goes through the injected wallet, never this transport.
+const ARC_READ_RPC = typeof window === 'undefined' ? ARC_RPC_URL : '/api/rpc'
+
 export const wagmiConfig = createConfig({
   chains: [arcTestnet],
   connectors: [injected()],
   transports: {
-    [arcTestnet.id]: http(ARC_RPC_URL),
+    [arcTestnet.id]: http(ARC_READ_RPC, { retryCount: 3, retryDelay: 250 }),
   },
   // SSR-safe hydration for Next.js
   ssr: true,

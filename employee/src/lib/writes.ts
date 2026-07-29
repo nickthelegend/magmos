@@ -92,3 +92,27 @@ export const vaultDeposit = (vaultId: bigint, token: Address, amount: bigint) =>
 
 export const vaultWithdraw = (vaultId: bigint, token: Address, amount: bigint) =>
   ({ address: MAGMOS_VAULT, abi: VAULT_ABI, functionName: 'withdraw', args: [vaultId, token, amount] }) as const
+
+/** Claim from several pools in one signature (a recipient with more than one employer). */
+export const claimMany = (poolIds: `0x${string}`[]) =>
+  ({ address: MAGMOS_PAYROLL, abi: PAYROLL_ABI, functionName: 'claimMany', args: [poolIds] }) as const
+
+/** Claim straight to another address — a savings wallet, an exchange, family. */
+export const claimTo = (poolId: `0x${string}`, to: Address) =>
+  ({ address: MAGMOS_PAYROLL, abi: PAYROLL_ABI, functionName: 'claimTo', args: [poolId, to] }) as const
+
+/**
+ * Draw earned pay directly to another address.
+ * Saves a second transaction (and a second gas payment) when the money is going onward anyway.
+ */
+export const drawAdvanceTo = (poolId: `0x${string}`, amount: bigint, to: Address) =>
+  ({
+    address: MAGMOS_ADVANCE,
+    abi: ADVANCE_ABI,
+    functionName: 'drawAdvanceTo',
+    args: [poolId, amount, to],
+  }) as const
+
+/** Draw everything currently available without reading the limit first. */
+export const drawMax = (poolId: `0x${string}`) =>
+  ({ address: MAGMOS_ADVANCE, abi: ADVANCE_ABI, functionName: 'drawMax', args: [poolId] }) as const

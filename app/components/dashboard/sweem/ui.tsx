@@ -315,3 +315,52 @@ export function SlippageInput({
     </div>
   );
 }
+
+/**
+ * Money input, matching the top-up modal's treatment.
+ *
+ * Extracted because three flows (top-up, EWA policy minimum, subsidy funding) had grown the same
+ * 15 lines of markup, and a currency field is exactly the thing that must not drift between them.
+ * Guards input to a decimal shape so a stray character can't reach `Number()` as NaN.
+ */
+export function AmountInput({
+  label,
+  value,
+  onChange,
+  symbol = "USDC",
+  autoFocus,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  symbol?: string;
+  autoFocus?: boolean;
+  hint?: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[12.5px] font-medium text-[var(--sw-text-muted)]">
+        {label}
+      </span>
+      <span className="flex items-center gap-2 rounded-xl border border-[var(--sw-border)] bg-[#1b1b1f] px-3 py-2.5 focus-within:border-[var(--sw-mint)]/60">
+        <input
+          type="text"
+          inputMode="decimal"
+          autoFocus={autoFocus}
+          className="min-w-0 flex-1 bg-transparent text-[18px] font-semibold tabular-nums text-[var(--sw-text)] outline-none placeholder:font-normal placeholder:text-[var(--sw-text-muted)]"
+          placeholder="0.00"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "" || /^\d*\.?\d*$/.test(v)) onChange(v);
+          }}
+        />
+        <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--sw-card-inset)] px-2.5 py-1 text-[12px] font-semibold text-[var(--sw-text)]">
+          {symbol}
+        </span>
+      </span>
+      {hint ? <span className="mt-1.5 block text-[12px] text-[var(--sw-text-dim)]">{hint}</span> : null}
+    </label>
+  );
+}
