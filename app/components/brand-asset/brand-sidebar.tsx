@@ -1,6 +1,6 @@
 import type { NavGroup } from "@/app/brand-asset/data";
 import { NAV_GROUPS } from "@/app/brand-asset/data";
-import { SuiMark } from "./sui-mark";
+import { MagmosMark } from "./magmos-mark";
 
 function ChevronIcon({ open = false }: { open?: boolean }) {
   return (
@@ -52,7 +52,7 @@ export function BrandSidebar() {
   return (
     <aside className="brand-sidebar">
       <div className="brand-sidebar-logo">
-        <SuiMark />
+        <MagmosMark />
         <span>Magmos</span>
       </div>
       <nav>

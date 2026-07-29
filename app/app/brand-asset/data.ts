@@ -2,17 +2,19 @@
 
 export type ColorSwatch = readonly [label: string, hex: string];
 
-export const BLUE_SCALE: readonly ColorSwatch[] = [
-  ["Blue 900", "#000612"],
-  ["Blue 800", "#00182c"],
-  ["Blue 700", "#0b3a79"],
-  ["Blue 600", "#245fca"],
-  ["Blue 500*", "#298dff"],
-  ["Blue 400", "#59a9fa"],
-  ["Blue 300", "#85c4f2"],
-  ["Blue 200", "#b8ddf8"],
-  ["Blue 100", "#d9f0fb"],
-  ["Blue 50", "#eff9fe"],
+// Magmos is molten orange. This scale is generated around the product accent --sw-mint (#ff6a1a)
+// and the secondary --sw-lavender (#ffb43d); the previous BLUE_SCALE was Sweem-era and wrong.
+export const ORANGE_SCALE: readonly ColorSwatch[] = [
+  ["Orange 900", "#1a0a02"],
+  ["Orange 800", "#3d1806"],
+  ["Orange 700", "#7a2f08"],
+  ["Orange 600", "#c24d0f"],
+  ["Orange 500*", "#ff6a1a"],
+  ["Orange 400", "#ff8340"],
+  ["Orange 300", "#ffb43d"],
+  ["Orange 200", "#ffd08a"],
+  ["Orange 100", "#ffe7c7"],
+  ["Orange 50", "#fff6ec"],
 ] as const;
 
 export const GRAY_SCALE: readonly ColorSwatch[] = [

@@ -71,8 +71,3 @@ export function poolIdFor(org: `0x${string}`, token: `0x${string}`): `0x${string
   )
 }
 
-// Min claim (raw) the contract enforces: 10% of one week's pay at the stream rate.
-export function minClaimRaw(rateRaw: bigint, periodS: bigint): bigint {
-  if (periodS === 0n) return 0n
-  return (BigInt(WEEK_S) * rateRaw) / (periodS * 10n)
-}

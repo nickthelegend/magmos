@@ -1274,7 +1274,7 @@ a:hover {
   line-height: 1;
 }
 
-.brand-sui-mark {
+.brand-magmos-mark {
   width: 38px;
   height: 49px;
   flex: 0 0 auto;
@@ -1359,7 +1359,7 @@ a.brand-nav-heading {
   color: #fff;
 }
 
-.brand-hero .brand-sui-mark {
+.brand-hero .brand-magmos-mark {
   width: 43px;
   height: 56px;
 }
@@ -1937,7 +1937,7 @@ a.brand-nav-heading {
   height: 70px;
 }
 
-.brand-diagram-sui {
+.brand-diagram-mark {
   right: 58px;
   top: 198px;
   width: 74px;
@@ -1948,7 +1948,7 @@ a.brand-nav-heading {
   padding: 0;
 }
 
-.brand-diagram-sui .brand-sui-mark {
+.brand-diagram-mark .brand-magmos-mark {
   width: 40px;
   height: 52px;
 }
@@ -2825,7 +2825,7 @@ button.dashboard-screen-action:disabled {
   --dash-line-strong: var(--sw-border-strong);
   --dash-panel: var(--sw-card);
   --dash-blue: var(--sw-mint);
-  --dash-blue-soft: rgba(196, 245, 107, 0.12);
+  --dash-blue-soft: rgba(255, 106, 26, 0.12);
 
   color: var(--sw-text);
   font-family: var(--font-inter), system-ui, sans-serif;
@@ -2996,7 +2996,7 @@ button.dashboard-screen-action:disabled {
   color: var(--sw-text-muted) !important;
 }
 .sw-dash :is(.sweem-badge-live, .dashboard-badge-new) {
-  background: rgba(196, 245, 107, 0.16) !important;
+  background: rgba(255, 106, 26, 0.16) !important;
   color: var(--sw-mint) !important;
 }
 .sw-dash .sweem-gate {
@@ -3058,7 +3058,7 @@ button.dashboard-screen-action:disabled {
 }
 /* Light-blue accent chips -> mint tint */
 .sw-landing :is(.bg-\[\#e8f0fb\], .bg-\[\#dbeafe\]) {
-  background-color: rgba(196, 245, 107, 0.12) !important;
+  background-color: rgba(255, 106, 26, 0.12) !important;
 }
 
 /* Brand fill -> mint with dark text */
@@ -3066,7 +3066,7 @@ button.dashboard-screen-action:disabled {
   background-color: var(--sw-mint) !important;
   color: #0a0a0b !important;
 }
-.sw-landing .bg-brand\/25 { background-color: rgba(196, 245, 107, 0.16) !important; }
+.sw-landing .bg-brand\/25 { background-color: rgba(255, 106, 26, 0.16) !important; }
 
 /* Dark text -> light */
 .sw-landing :is(
@@ -3092,9 +3092,9 @@ button.dashboard-screen-action:disabled {
 .sw-landing :is(.ring-border, .ring-\[\#e5e7eb\], .ring-\[\#eef0f3\], .ring-black\/5) {
   --tw-ring-color: var(--sw-border) !important;
 }
-.sw-landing .hover\:border-brand\/30:hover { border-color: rgba(196, 245, 107, 0.32) !important; }
+.sw-landing .hover\:border-brand\/30:hover { border-color: rgba(255, 106, 26, 0.32) !important; }
 .sw-landing :is(.ring-brand, .hover\:ring-brand\/20:hover) {
-  --tw-ring-color: rgba(196, 245, 107, 0.3) !important;
+  --tw-ring-color: rgba(255, 106, 26, 0.3) !important;
 }
 
 /* Blue gradients -> mint / lavender */

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Toaster } from "sonner";
 import { Poppins, Geist, Inter, Space_Grotesk } from "next/font/google";
 import { SmoothScroll } from "@/components/providers/smooth-scroll";
 import { DashboardProviders } from "@/components/dashboard/providers";
@@ -123,6 +124,9 @@ export default function RootLayout({
         <DashboardProviders>
           <SmoothScroll>{children}</SmoothScroll>
         </DashboardProviders>
+        {/* Mounted at the root: /yield and /faucet call toast() too, and with the Toaster only
+            inside the dashboard and onboarding layouts their feedback was silently dropped. */}
+        <Toaster theme="dark" richColors position="bottom-right" />
       </body>
     </html>
   );

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Navbar } from "@/components/layout/navbar";
 import { LaunchAppButton } from "@/components/shared/launch-app-button";
 import { SpotlightNew } from "@/components/ui/aceternity/spotlight-new";
@@ -46,11 +47,15 @@ export function HeroSection() {
       </div>
 
       <div className="relative z-10 mx-auto mt-14 w-full max-w-5xl">
-        <img
+        {/* The hero screenshot is the LCP element, so it is served through next/image with
+            `priority`: optimized formats, no lazy-load delay, and no layout shift. */}
+        <Image
           src="/magmos-dashboard.png"
           alt="Magmos dashboard — live cross-border payroll streaming"
           width={1440}
           height={900}
+          priority
+          sizes="(max-width: 1024px) 100vw, 1024px"
           className="w-full rounded-[18px] [mask-image:linear-gradient(to_bottom,black_0%,black_34%,transparent_82%)]"
         />
       </div>

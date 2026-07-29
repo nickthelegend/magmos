@@ -1,17 +1,18 @@
 "use client";
 
-import { createRef, forwardRef, useRef } from "react";
+import Image from "next/image";
+import {createRef, forwardRef, useRef, useMemo } from "react";
 import { AnimatedBeam } from "@/components/ui/animated-beam";
 import { cn } from "@/lib/utils";
 
-const LIME = "#ff6a1a";
-const VIOLET = "#ffb43d";
+const ORANGE = "#ff6a1a";
+const AMBER = "#ffb43d";
 
 // Distributed workforce — each gets streamed USDC from the pool.
 const EMPLOYEES = [
-  { name: "Manila", color: LIME },
-  { name: "Lagos", color: VIOLET },
-  { name: "Karachi", color: LIME },
+  { name: "Manila", color: ORANGE },
+  { name: "Lagos", color: AMBER },
+  { name: "Karachi", color: ORANGE },
 ];
 
 // Local chains recipients bridge their USDC home to via CCTP.
@@ -60,8 +61,11 @@ function UserIcon({ color }: { color: string }) {
 export function YieldRouting() {
   const containerRef = useRef<HTMLDivElement>(null);
   const poolRef = useRef<HTMLDivElement>(null);
-  const empRefs = useRef(EMPLOYEES.map(() => createRef<HTMLDivElement>()));
-  const protoRefs = useRef(PROTOCOLS.map(() => createRef<HTMLDivElement>()));
+  // Held in a memo, not a ref: `AnimatedBeam` needs these during render, and reading
+  // `someRef.current` in the render phase is exactly what React forbids. The createRef objects
+  // themselves are still stable across renders, which is all the beams require.
+  const empRefs = useMemo(() => EMPLOYEES.map(() => createRef<HTMLDivElement>()), []);
+  const protoRefs = useMemo(() => PROTOCOLS.map(() => createRef<HTMLDivElement>()), []);
 
   const mid = (EMPLOYEES.length - 1) / 2;
   const protoMid = (PROTOCOLS.length - 1) / 2;
@@ -75,7 +79,7 @@ export function YieldRouting() {
       <div className="z-10 flex flex-col justify-center gap-6">
         {EMPLOYEES.map((e, i) => (
           <Labeled key={i} label={e.name}>
-            <Node ref={empRefs.current[i]}>
+            <Node ref={empRefs[i]}>
               <UserIcon color={e.color} />
             </Node>
           </Labeled>
@@ -86,7 +90,13 @@ export function YieldRouting() {
       <div className="z-10 flex flex-col justify-center">
         <Labeled label="Payroll pool">
           <Node ref={poolRef} size="lg">
-            <img src="/protocols/lending/usd-coin-usdc-logo.png" alt="USDC" className="size-9" />
+            <Image
+              src="/protocols/lending/usd-coin-usdc-logo.png"
+              alt="USDC"
+              width={36}
+              height={36}
+              className="size-9"
+            />
           </Node>
         </Labeled>
       </div>
@@ -95,10 +105,12 @@ export function YieldRouting() {
       <div className="z-10 flex flex-col justify-center gap-4">
         {PROTOCOLS.map((p, i) => (
           <Labeled key={p.name} label={p.name}>
-            <Node ref={protoRefs.current[i]} className="size-10">
-              <img
+            <Node ref={protoRefs[i]} className="size-10">
+              <Image
                 src={p.logo}
                 alt=""
+                width={32}
+                height={32}
                 className={cn("size-8 rounded-full bg-white object-cover")}
               />
             </Node>
@@ -111,15 +123,15 @@ export function YieldRouting() {
         <AnimatedBeam
           key={i}
           containerRef={containerRef}
-          fromRef={empRefs.current[i]}
+          fromRef={empRefs[i]}
           toRef={poolRef}
           curvature={(mid - i) * 12}
           duration={4}
           delay={i * 0.25}
           pathColor="#ffffff"
           pathOpacity={0.08}
-          gradientStartColor={LIME}
-          gradientStopColor={VIOLET}
+          gradientStartColor={ORANGE}
+          gradientStopColor={AMBER}
         />
       ))}
 
@@ -129,14 +141,14 @@ export function YieldRouting() {
           key={i}
           containerRef={containerRef}
           fromRef={poolRef}
-          toRef={protoRefs.current[i]}
+          toRef={protoRefs[i]}
           curvature={(protoMid - i) * 14}
           duration={4}
           delay={0.4 + i * 0.2}
           pathColor="#ffffff"
           pathOpacity={0.08}
-          gradientStartColor={LIME}
-          gradientStopColor={VIOLET}
+          gradientStartColor={ORANGE}
+          gradientStopColor={AMBER}
         />
       ))}
     </div>

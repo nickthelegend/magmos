@@ -23,7 +23,7 @@ export function ImpactChart() {
           </span>
           USDC streamed
         </span>
-        <span className="rounded-full bg-[rgba(196,245,107,0.16)] px-2.5 py-1 text-[11px] font-medium text-[#ff6a1a]">
+        <span className="rounded-full bg-[rgba(255, 106, 26, 0.16)] px-2.5 py-1 text-[11px] font-medium text-[#ff6a1a]">
           Settled per second
         </span>
       </div>

@@ -4,10 +4,10 @@ import { ContrastCard } from "@/components/brand-asset/contrast-card";
 import { GradientTile } from "@/components/brand-asset/gradient-tile";
 import { MisuseVisual } from "@/components/brand-asset/misuse-visual";
 import { PaletteColumn } from "@/components/brand-asset/palette-column";
-import { SuiMark } from "@/components/brand-asset/sui-mark";
+import { MagmosMark } from "@/components/brand-asset/magmos-mark";
 import { TechnicalVisual } from "@/components/brand-asset/technical-visual";
 import {
-  BLUE_SCALE,
+  ORANGE_SCALE,
   CONTRAST_CARDS,
   GRAY_SCALE,
   MISUSE_CARDS,
@@ -36,7 +36,7 @@ export default function BrandAssetPage() {
 
         {/* ── Hero ─────────────────────────────────────────────── */}
         <section className="brand-hero">
-          <SuiMark light />
+          <MagmosMark light />
           <h1>Magmos Brand Guidelines</h1>
         </section>
 
@@ -60,7 +60,7 @@ export default function BrandAssetPage() {
             </p>
             <div className="brand-core-swatches">
               <div className="brand-core-blue">
-                <pre>{`Name:  Magmos Blue 500\nCMYK:  84/45/0/0\nRGB:   41/141/255\nHEX:   #298DFF\nPMS:   285C C`}</pre>
+                <pre>{`Name:  Magmos Orange 500\nCMYK:  0/72/95/0\nRGB:   255/106/26\nHEX:   #FF6A1A\nPMS:   1655 C`}</pre>
               </div>
               <div className="brand-core-black">
                 <pre>{`Name:  Black\nCMYK:  0/0/0/100\nRGB:   0/0/0\nHEX:   #000000\nPMS:   Black 6C C`}</pre>
@@ -78,7 +78,7 @@ export default function BrandAssetPage() {
               including web, diagrams, and illustrations.
             </p>
             <div className="brand-palette-grid">
-              <PaletteColumn colors={BLUE_SCALE} />
+              <PaletteColumn colors={ORANGE_SCALE} />
               <PaletteColumn colors={GRAY_SCALE} />
             </div>
           </div>
@@ -146,8 +146,8 @@ export default function BrandAssetPage() {
           <h2>Primary Gradient</h2>
           <div>
             <p>
-              Our primary gradient uses only Magmos Blue 500, white, and black. We add grain for
-              texture and depth, then finish it with a blue overlay to bring it closer to Magmos Blue 500.
+              Our primary gradient uses only Magmos Orange 500, white, and black. We add grain for
+              texture and depth, then finish it with a warm overlay to bring it closer to Magmos Orange 500.
             </p>
             <GradientTile variant="primary" />
           </div>

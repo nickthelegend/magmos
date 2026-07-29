@@ -62,8 +62,13 @@ export function DottedMap<M extends Marker = Marker>({
   })
   const processedMarkers = addMarkers(markers)
 
-  // Compute stagger helpers in a single, simple pass
-  const { xStep, yToRowIndex } = React.useMemo(() => {
+  // Compute stagger helpers in a single, simple pass.
+  //
+  // Not memoized: `createMap` returns a fresh `points` array on every render AND `addMarkers`
+  // mutates it, so a `useMemo` keyed on `points` never hit and could observe the array mid-mutation
+  // — which is exactly what the React Compiler refused to optimize. A plain pass is honest and, at
+  // this size, free.
+  const { xStep, yToRowIndex } = ((): { xStep: number; yToRowIndex: Map<number, number> } => {
     const sorted = [...points].sort((a, b) => a.y - b.y || a.x - b.x)
     const rowMap = new Map<number, number>()
     let step = 0
@@ -85,7 +90,7 @@ export function DottedMap<M extends Marker = Marker>({
     }
 
     return { xStep: step || 1, yToRowIndex: rowMap }
-  }, [points])
+  })()
 
   return (
     <svg

@@ -287,7 +287,7 @@ function StreamedHeroCard({
     <SweemCard className="flex flex-col">
       <div className="flex items-start justify-between">
         <CardLabel className="text-[15px] text-[var(--sw-text)]">Total Streamed</CardLabel>
-        <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(196,245,107,0.14)] px-2 py-1 text-[12px] font-semibold text-[var(--sw-mint)]">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(255, 106, 26, 0.14)] px-2 py-1 text-[12px] font-semibold text-[var(--sw-mint)]">
           <span
             className={
               funded
@@ -670,7 +670,7 @@ function StatusPill({ paused, stopped }: { paused: boolean; stopped: boolean }) 
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(196,245,107,0.14)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--sw-mint)]">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(255, 106, 26, 0.14)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--sw-mint)]">
       <span className="size-1.5 rounded-full bg-[var(--sw-mint)]" /> Streaming
     </span>
   );

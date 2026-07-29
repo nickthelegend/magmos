@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMounted } from "@/components/sweem-ui/use-mounted";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
@@ -41,14 +42,16 @@ export function PayModal({
   inline?: boolean;
 }) {
   const [token, setToken] = useState<TokenSymbol>("USDC");
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [status, setStatus] = useState<"form" | "processing" | "success">("form");
-  useEffect(() => setMounted(true), []);
 
-  // Reset to the form each time the modal is (re)opened.
-  useEffect(() => {
+  // Reset to the form each time the modal is (re)opened. Adjusting state during render on a prop
+  // change is the sanctioned pattern for this; an effect here caused a cascading render.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) setStatus("form");
-  }, [open]);
+  }
 
   const fee = NETWORK_FEE[token];
   const total = amount + fee;
@@ -104,7 +107,7 @@ export function PayModal({
                   transition={{ type: "spring", stiffness: 240, damping: 18 }}
                   className="relative flex size-24 items-center justify-center"
                 >
-                  <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(196,245,107,0.28),transparent_70%)] blur-lg" />
+                  <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255, 106, 26, 0.28),transparent_70%)] blur-lg" />
                   <Image src="/magmos.png" alt={merchant} width={72} height={72} className="relative size-[72px]" />
                   <span className="absolute -bottom-1 -right-1 flex size-7 items-center justify-center rounded-full border-2 border-[var(--sw-card)] bg-[var(--sw-mint)] text-black">
                     <Check className="size-4" strokeWidth={3} />

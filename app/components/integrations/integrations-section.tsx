@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Reveal } from "@/components/motion/reveal";
 import { InfiniteMovingCards, type MarqueeItem } from "@/components/ui/aceternity/infinite-moving-cards";
 import { cn } from "@/lib/utils";
@@ -9,9 +10,11 @@ const USDC = `${BASE}/usd-coin-usdc-logo.png`;
 function Mark({ src, label }: { src: string; label: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      <img
+      <Image
         src={src}
         alt=""
+        width={24}
+        height={24}
         className={cn("size-6 shrink-0 rounded-full bg-white object-cover")}
       />
       <span className="whitespace-nowrap text-[15px] font-medium text-[#344054]">{label}</span>

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 import { erc20Abi, type Address } from "viem";
 import { Coins, PiggyBank, Wallet } from "lucide-react";
 
@@ -83,7 +82,6 @@ function StreamCard({
 
   const baseRaw = claimQuery.data?.raw ?? 0n;
   const polledAt = claimQuery.data?.at;
-  const claimable = fromRaw(TOKEN, baseRaw);
   const hasClaimable = baseRaw > 0n;
 
   // The contract rejects claims below a tiny anti-dust floor (MagmosPayroll.MIN_CLAIM_AMOUNT =
@@ -158,7 +156,7 @@ function StreamCard({
   const working = busy || confirming;
 
   return (
-    <div className="sweem-card sweem-flow-card">
+    <div className="sweem-card">
       <div className="sweem-card-head">
         <div>
           <p className="sweem-card-title">{orgName ?? `Unnamed org · ${shortAddr(org)}`}</p>
@@ -255,8 +253,6 @@ function VaultCard({
   vaultId: bigint;
   onChanged: () => void;
 }) {
-  const { address } = useAccount();
-  const wallet = address as Address;
   const mounted = useMounted();
   const { run, confirming } = useTxRunner();
   const [busy, setBusy] = useState(false);

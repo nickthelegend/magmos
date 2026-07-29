@@ -122,7 +122,7 @@ in Node) and screenshots each step into `demo-recording/shots-ewa/`.
 
 ## Tests
 
-74 Foundry tests pass (49 pre-existing + 25 new). The load-bearing one is the fuzz invariant:
+93 Foundry tests pass (49 original + 25 EWA + 19 batch/solvency). The load-bearing one is the fuzz invariant:
 
 ```
 testFuzz_DrawPlusClaim_EqualsEarned — for any rate, elapsed time and draw fraction,

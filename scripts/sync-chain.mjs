@@ -49,6 +49,13 @@ const ADDRESS_MAP = {
   MAGMOS_YIELD_VAULT: "MagmosYieldVault",
 };
 
+// The SDK publishes a default address, and the docs quote the contracts table. Both drifted after
+// a redeploy before this script covered them.
+const SDK_FILE = join(ROOT, 'sdk/src/advance.ts')
+const DOC_FILES = ['README.md', 'RUN.md', 'PITCH.md', 'ROADMAP.md', 'docs/EARNED-WAGE-ACCESS.md'].map(
+  (f) => join(ROOT, f)
+)
+
 const ENV_FILES = [
   join(ROOT, "app/.env.local"),
   join(ROOT, "app/.env.example"),
@@ -132,10 +139,40 @@ for (const file of ENV_FILES) {
   writeOrCheck(file, src, `env → ${file.replace(ROOT + "/", "")}`);
 }
 
+// ---- 4. SDK default address --------------------------------------------
+if (existsSync(SDK_FILE) && deployed.MagmosAdvance) {
+  const src = readFileSync(SDK_FILE, 'utf8')
+  const next = src.replace(
+    /(export const MAGMOS_ADVANCE_ADDRESS =\s*\n?\s*')0x[0-9a-fA-F]{40}(')/m,
+    `$1${deployed.MagmosAdvance}$2`
+  )
+  writeOrCheck(SDK_FILE, next, 'sdk default advance address')
+}
+
+// ---- 5. docs must not quote a SUPERSEDED Magmos address ----------------
+// Precise by construction: only addresses we know we replaced are flagged. An earlier version
+// compared against "anything not current", which false-positived on 64-char transaction hashes
+// (their first 40 hex chars look like an address) and on other protocols' addresses.
+const superseded = Object.values(deployed.superseded ?? {})
+  .flat()
+  .map((a) => String(a).toLowerCase())
+
+if (superseded.length) {
+  for (const f of DOC_FILES) {
+    if (!existsSync(f)) continue
+    const text = readFileSync(f, 'utf8')
+    // Negative lookahead: don't match the 40-hex prefix of a longer hex string (i.e. a tx hash).
+    for (const m of text.matchAll(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g)) {
+      if (!superseded.includes(m[0].toLowerCase())) continue
+      drift.push(`superseded address ${m[0]} still quoted in ${f.replace(ROOT + '/', '')}`)
+    }
+  }
+}
+
 // ---- report -------------------------------------------------------------
 if (CHECK) {
   if (drift.length) {
-    console.error(`✗ ${drift.length} file(s) out of sync with the deployment:`);
+    console.error(`✗ ${drift.length} item(s) out of sync with the deployment:`);
     for (const d of drift) console.error(`   ${d}`);
     console.error("\n  fix: node scripts/sync-chain.mjs");
     process.exit(1);

@@ -1,4 +1,4 @@
-import { SuiMark } from "./sui-mark";
+import { MagmosMark } from "./magmos-mark";
 
 type TechnicalVisualVariant = "rings" | "cube" | "diagram";
 
@@ -22,8 +22,8 @@ function DiagramVisual() {
       <span className="brand-diagram-node brand-diagram-auth">AUTH PROVIDER</span>
       <span className="brand-diagram-node brand-diagram-salt">SALT SERVICE</span>
       <span className="brand-diagram-node brand-diagram-zk">ZK PROVING SERVICE</span>
-      <span className="brand-diagram-node brand-diagram-sui">
-        <SuiMark light />
+      <span className="brand-diagram-node brand-diagram-mark">
+        <MagmosMark light />
       </span>
       <span className="brand-diagram-line brand-diagram-line-a" />
       <span className="brand-diagram-line brand-diagram-line-b" />

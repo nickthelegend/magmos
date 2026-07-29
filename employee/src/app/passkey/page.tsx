@@ -21,6 +21,13 @@ import {
   EXPLORER_TX,
 } from "@/lib/magmos";
 
+// Gasless calls settle as user-operations; surface the underlying transaction so a recipient can
+// verify a movement of their own pay on the explorer, exactly as the wallet-signed flow does.
+const receiptToast = (txHash: string) => ({
+  description: `Tx ${txHash.slice(0, 12)}\u2026${txHash.slice(-10)}`,
+  action: { label: "Receipt", onClick: () => window.open(EXPLORER_TX(txHash as `0x${string}`), "_blank") },
+});
+
 type Ctx = Awaited<ReturnType<typeof smartAccountFrom>>;
 type Pool = { poolId: `0x${string}`; claimable: bigint; drawable: bigint };
 
@@ -105,8 +112,9 @@ export default function PasskeyPage() {
       });
       const hash = await sendGaslessCall(ctx, { to: MAGMOS_ADVANCE, data });
       toast.success("Advance submitted (gasless)");
-      await ctx.bundler.waitForUserOperationReceipt({ hash });
-      toast.success("Your earned pay is in your wallet");
+      const rcpt = await ctx.bundler.waitForUserOperationReceipt({ hash });
+      const txHash = (rcpt as { receipt?: { transactionHash?: string } })?.receipt?.transactionHash;
+      toast.success("Your earned pay is in your wallet", txHash ? receiptToast(txHash) : undefined);
       await loadStreams(ctx.address);
     } catch (e) {
       toast.error((e as Error).message?.slice(0, 140) || "Draw failed");
@@ -129,8 +137,9 @@ export default function PasskeyPage() {
         calls: [{ to: MAGMOS_PAYROLL, data }],
       });
       toast.success("Claim submitted (gasless)");
-      await ctx.bundler.waitForUserOperationReceipt({ hash });
-      toast.success("Claimed!");
+      const rcpt = await ctx.bundler.waitForUserOperationReceipt({ hash });
+      const txHash = (rcpt as { receipt?: { transactionHash?: string } })?.receipt?.transactionHash;
+      toast.success("Claimed!", txHash ? receiptToast(txHash) : undefined);
       await loadStreams(ctx.address);
     } catch (e) {
       toast.error((e as Error).message?.slice(0, 140) || "Claim failed");

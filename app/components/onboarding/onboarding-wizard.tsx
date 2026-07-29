@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSweemApi } from "@/lib/api";
@@ -18,12 +18,11 @@ export function OnboardingWizard() {
   const router = useRouter();
   const wallet = api.address;
   const org = api.orgQuery.data;
-  const [step, setStep] = useState<StepKey>("connect");
-
-  // Resuming: if the org already exists, jump straight to done.
-  useEffect(() => {
-    if (org && step === "connect") setStep("done");
-  }, [org, step]);
+  // Resuming: an org that already exists means onboarding is finished. Derived rather than synced
+  // from an effect, so there is no render where we show "connect" to an already-onboarded user.
+  const [chosenStep, setChosenStep] = useState<StepKey | null>(null);
+  const step: StepKey = chosenStep ?? (org ? "done" : "connect");
+  const setStep = setChosenStep;
 
   const finish = () => router.push("/dashboard");
 

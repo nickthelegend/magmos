@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {useState} from "react";
+import { useSeededState } from "@/components/sweem-ui/use-seeded-state";
 import { toast } from "sonner";
 import { ArrowLeft, Check, Copy } from "lucide-react";
 import { DashboardPageShell } from "@/components/dashboard/dashboard-screen";
@@ -205,9 +206,8 @@ function writeLogo(wallet: string | undefined, url: string) {
 function AccountSettings() {
   const api = useSweemApi();
   const org = api.orgQuery.data;
-  const [name, setName] = useState("");
+  const [name, setName] = useSeededState(org?.name ?? "");
   const [saving, setSaving] = useState(false);
-  useEffect(() => setName(org?.name ?? ""), [org?.name]);
 
   const save = async () => {
     if (!name.trim()) return;
@@ -252,13 +252,9 @@ function AccountSettings() {
 function BusinessSettings() {
   const api = useSweemApi();
   const org = api.orgQuery.data;
-  const [name, setName] = useState("");
-  const [logo, setLogo] = useState("");
+  const [name, setName] = useSeededState(org?.name ?? "");
+  const [logo, setLogo] = useSeededState(readLogo(api.address));
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    setName(org?.name ?? "");
-    setLogo(readLogo(api.address));
-  }, [org?.name, api.address]);
 
   const save = async () => {
     // Magmos requires a non-empty org name; fall back to the current name.
@@ -301,9 +297,8 @@ function BusinessSettings() {
 
 function BrandingSettings() {
   const api = useSweemApi();
-  const [logo, setLogo] = useState("");
+  const [logo, setLogo] = useSeededState(readLogo(api.address));
   const [saving, setSaving] = useState(false);
-  useEffect(() => setLogo(readLogo(api.address)), [api.address]);
 
   const save = async () => {
     setSaving(true);

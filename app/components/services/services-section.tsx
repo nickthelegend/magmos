@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Reveal } from "@/components/motion/reveal";
 import { Section } from "@/components/layout/section";
 import { SectionHeading } from "@/components/layout/section-heading";
@@ -99,9 +100,11 @@ export function ServicesSection() {
                   className="flex items-center justify-between rounded-xl border border-border bg-white px-3 py-2.5"
                 >
                   <span className="flex items-center gap-2 text-[13px] font-medium text-text-primary">
-                    <img
+                    <Image
                       src={y.logo}
                       alt=""
+                      width={20}
+                      height={20}
                       className={cn("size-5 rounded-full bg-white object-cover")}
                     />
                     {y.name}
@@ -150,8 +153,13 @@ export function ServicesSection() {
                 {allocation.map((a) => (
                   <span key={a.label} className="flex items-center gap-1.5 text-[12px] text-text-secondary">
                     {a.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.logo} alt="" className="size-4 rounded-full object-contain" />
+                      <Image
+                        src={a.logo}
+                        alt=""
+                        width={16}
+                        height={16}
+                        className="size-4 rounded-full object-contain"
+                      />
                     ) : (
                       <span className="size-2 rounded-full" style={{ background: a.color }} />
                     )}

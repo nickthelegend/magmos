@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {useState} from "react";
+import { useMounted } from "@/components/sweem-ui/use-mounted";
 import { createPortal } from "react-dom";
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +46,7 @@ export default function WebhooksPage() {
     url: w.url,
     events: (w.events ?? []) as EventId[],
     secret: sessionSecrets[w.id] ?? `${w.secretPrefix ?? "whsec_"}${"•".repeat(24)}`,
-    createdAt: Date.parse(w.createdAt) || Date.now(),
+    createdAt: Date.parse(w.createdAt) || 0,
   }));
 
   const [addOpen, setAddOpen] = useState(false);
@@ -257,16 +258,20 @@ function AddEndpointModal({
   onClose: () => void;
   onAdd: (url: string, events: EventId[]) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [url, setUrl] = useState("");
   const [selected, setSelected] = useState<EventId[]>(EVENTS.map((e) => e.id));
-  useEffect(() => setMounted(true), []);
-  useEffect(() => {
+
+  // Clear the form each time the modal is (re)opened — adjusted during render rather than in an
+  // effect, which cascaded a second render pass on every open.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setUrl("");
       setSelected(EVENTS.map((e) => e.id));
     }
-  }, [open]);
+  }
 
   if (!mounted || !open) return null;
   const valid = /^https?:\/\/.+/.test(url.trim());
@@ -347,10 +352,14 @@ function ConfirmDeleteModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
+  // Re-arm the type-to-confirm box whenever a different endpoint is targeted.
   const [text, setText] = useState("");
-  useEffect(() => setMounted(true), []);
-  useEffect(() => setText(""), [target]);
+  const [prevTarget, setPrevTarget] = useState(target);
+  if (prevTarget !== target) {
+    setPrevTarget(target);
+    setText("");
+  }
 
   if (!mounted || !target) return null;
   const confirmed = text.trim().toLowerCase() === "delete";

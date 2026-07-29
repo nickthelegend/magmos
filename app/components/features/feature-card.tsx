@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 function ImageIcon({ className }: { className?: string }) {
@@ -49,9 +50,11 @@ export function FeatureCard({
         {media ? (
           media
         ) : image ? (
-          <img
+          <Image
             src={image}
             alt={imageAlt}
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-[600ms] ease-out group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
         ) : (

@@ -10,8 +10,6 @@ import { poolIdFor, USDC } from "@/lib/magmos";
 import {
   getPool,
   getEmployees,
-  getClaimable,
-  getStream,
   getUsdcBalance,
   getEmployeeSnapshots,
   type PoolSummary,

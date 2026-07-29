@@ -10,7 +10,7 @@ import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { CardLabel, IconChip, SweemCard } from "@/components/sweem-ui/primitives";
 import { getPoolLiability, getUsdcAllowance } from "@/lib/reads";
 import { approveUsdc, topup } from "@/lib/writes";
-import { MAGMOS_PAYROLL, USDC, EXPLORER_TX } from "@/lib/magmos";
+import { MAGMOS_PAYROLL, EXPLORER_TX } from "@/lib/magmos";
 import { wagmiConfig } from "@/lib/wagmi";
 import { usdcFixed } from "./helpers";
 

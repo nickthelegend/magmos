@@ -9,7 +9,7 @@ Stream USDC to anyone in the world, settled per second. Claim anytime. Bridge ho
 
 <p align="center">
 Built for the <b>Stablecoin Commerce Stack Challenge</b> — Track 1: Best Cross-Border Payments & Remittances Experience (UAE → Global).<br/>
-🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0x23888C1556FF5ebbA045D979f56C1151D0D0af47">arcscan</a>
+🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5">arcscan</a>
 </p>
 
 ---
@@ -25,7 +25,7 @@ dollar-denominated fees, deterministic finality, no seed phrase required (passke
 
 ```
 magmos/
-├── contracts/       Solidity (Foundry) — 6 contracts live on Arc testnet, 74 tests
+├── contracts/       Solidity (Foundry) — 6 contracts live on Arc testnet, 93 tests
 ├── app/             Org dashboard + landing (Next.js 16 + wagmi/viem + Mongo)  → :3100  ▲ Vercel
 ├── employee/        Recipient portal (live ticker, claim, vault, CCTP, passkey)   → :3001
 ├── sdk/             @magmos/sdk — drop-in Pay button + stream client (wagmi/viem)
@@ -79,14 +79,14 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 
 | Contract | Address |
 |---|---|
-| MagmosPayroll | `0x23888C1556FF5ebbA045D979f56C1151D0D0af47` |
-| MagmosAdvance (earned wage access) | `0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4` |
+| MagmosPayroll | `0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5` |
+| MagmosAdvance (earned wage access) | `0xD3bB15A03982e928e38DcE7610930246867fa240` |
 | MagmosRegistry | `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501` |
 | MagmosVault | `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322` |
 | MagmosYieldVault | `0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2` |
 | MagmosUSDC (faucet test token) | `0x3248CcD4c276b4785f81f8c1207094262F67a33C` |
 
-**74 Foundry tests** (unit, fuzz, full-lifecycle, reentrancy-attack) — including the earned-wage
+**93 Foundry tests** (unit, fuzz, full-lifecycle, reentrancy-attack) — including the earned-wage
 invariant `drawn + claimed == earned` under fuzz — plus a 3-agent code review with every finding
 fixed and redeployed.
 
@@ -95,7 +95,7 @@ fixed and redeployed.
 ```bash
 # contracts
 cd contracts && forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts@v5.6.1
-forge test                                  # 74 tests
+forge test                                  # 93 tests
 
 # org dashboard (needs .env.local — see .env.example)
 cd app && bun install && PORT=3100 bun dev  # http://localhost:3100

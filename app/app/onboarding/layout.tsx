@@ -1,4 +1,3 @@
-import { Toaster } from "sonner";
 import { RequireWallet } from "@/components/dashboard/require-wallet";
 import { OnboardingChrome } from "@/components/onboarding/onboarding-chrome";
 
@@ -11,7 +10,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <RequireWallet>
         <OnboardingChrome>{children}</OnboardingChrome>
       </RequireWallet>
-      <Toaster theme="dark" richColors position="bottom-right" />
     </>
   );
 }

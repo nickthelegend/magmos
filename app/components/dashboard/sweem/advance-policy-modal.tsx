@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "@wagmi/core";
@@ -34,27 +34,61 @@ export function AdvancePolicyModal({
   wallet: `0x${string}`;
   onSaved: () => void;
 }) {
-  const { writeContractAsync } = useWriteContract();
-  const [busy, setBusy] = useState(false);
-  const [maxPct, setMaxPct] = useState(100);
-  const [minDraw, setMinDraw] = useState("0.01");
-  const [enabled, setEnabled] = useState(true);
-  const [subsidy, setSubsidy] = useState("");
-
   const policyQuery = useQuery({
     queryKey: ["advancePolicy", poolId],
     enabled: open,
     queryFn: () => getAdvancePolicy(poolId),
   });
 
-  // Seed the form from chain state whenever the modal opens.
-  useEffect(() => {
-    const p = policyQuery.data;
-    if (!open || !p) return;
-    setMaxPct(Math.round(Number(p.maxDrawBps) / 100));
-    setMinDraw((Number(p.minDraw) / 10 ** USDC_DECIMALS).toString());
-    setEnabled(!p.disabled);
-  }, [open, policyQuery.data]);
+  const p = policyQuery.data;
+  // The form's initial values come from chain state. Rather than syncing them into state from an
+  // effect (which causes a cascading render and can clobber typing mid-edit), the form is a child
+  // that takes them as props and is REMOUNTED when they change — `key` is the idiomatic reset.
+  const seed = p
+    ? {
+        maxPct: Math.round(Number(p.maxDrawBps) / 100),
+        minDraw: (Number(p.minDraw) / 10 ** USDC_DECIMALS).toString(),
+        enabled: !p.disabled,
+      }
+    : { maxPct: 100, minDraw: "0.01", enabled: true };
+
+  return (
+    <PolicyForm
+      key={`${poolId}:${seed.maxPct}:${seed.minDraw}:${seed.enabled}`}
+      open={open}
+      onClose={onClose}
+      poolId={poolId}
+      wallet={wallet}
+      onSaved={onSaved}
+      seed={seed}
+      refetchPolicy={policyQuery.refetch}
+    />
+  );
+}
+
+function PolicyForm({
+  open,
+  onClose,
+  poolId,
+  wallet,
+  onSaved,
+  seed,
+  refetchPolicy,
+}: {
+  open: boolean;
+  onClose: () => void;
+  poolId: `0x${string}`;
+  wallet: `0x${string}`;
+  onSaved: () => void;
+  seed: { maxPct: number; minDraw: string; enabled: boolean };
+  refetchPolicy: () => unknown;
+}) {
+  const { writeContractAsync } = useWriteContract();
+  const [busy, setBusy] = useState(false);
+  const [maxPct, setMaxPct] = useState(seed.maxPct);
+  const [minDraw, setMinDraw] = useState(seed.minDraw);
+  const [enabled, setEnabled] = useState(seed.enabled);
+  const [subsidy, setSubsidy] = useState("");
 
   async function send(
     label: string,
@@ -76,7 +110,7 @@ export function AdvancePolicyModal({
         "Policy update",
         setPoolPolicy(poolId, Math.round(maxPct * 100), toRawUsdc(Number(minDraw) || 0), !enabled)
       );
-      await policyQuery.refetch();
+      await refetchPolicy();
       onSaved();
       onClose();
     } catch (e) {

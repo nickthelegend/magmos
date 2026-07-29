@@ -264,7 +264,6 @@ export async function pollAttestation(
   const timeoutMs = options.timeoutMs ?? 20 * 60_000
   const started = Date.now()
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const elapsed = Date.now() - started

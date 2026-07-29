@@ -38,7 +38,7 @@ export function CodeBlock({ code, className }: { code: string; className?: strin
 
 const METHOD_COLOR: Record<string, string> = {
   GET: "text-[#4ea1ff] bg-[rgba(78,161,255,0.12)]",
-  POST: "text-[var(--sw-mint)] bg-[rgba(196,245,107,0.14)]",
+  POST: "text-[var(--sw-mint)] bg-[rgba(255, 106, 26, 0.14)]",
   DELETE: "text-[#ef4444] bg-[rgba(239,68,68,0.12)]",
   PUT: "text-[#e0a44a] bg-[rgba(224,164,74,0.14)]",
 };
@@ -75,7 +75,7 @@ export function Endpoint({
             "ml-auto rounded-md px-2 py-0.5 text-[11px] font-medium",
             auth
               ? "bg-[var(--sw-card-inset)] text-[var(--sw-text-muted)]"
-              : "bg-[rgba(196,245,107,0.14)] text-[var(--sw-mint)]",
+              : "bg-[rgba(255, 106, 26, 0.14)] text-[var(--sw-mint)]",
           )}
         >
           {auth ? "Wallet-signed" : "Public"}

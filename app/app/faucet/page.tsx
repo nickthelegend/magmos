@@ -104,7 +104,7 @@ export default function FaucetPage() {
               rel="noreferrer"
               className="text-[#ff6a1a] hover:underline"
             >
-              Circle's faucet
+              Circle&apos;s faucet
             </a>{" "}
             (select Arc testnet) so you can send transactions.
           </div>

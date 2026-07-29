@@ -182,7 +182,7 @@ export function Sidebar({
                   <span className="relative z-10 flex flex-1 items-center justify-between gap-1.5">
                     <span className="whitespace-nowrap">{item.label}</span>
                     {item.badge && (
-                      <span className="shrink-0 whitespace-nowrap rounded bg-[rgba(196,245,107,0.16)] px-1 py-0.5 text-[8.5px] font-semibold text-[var(--sw-mint)]">
+                      <span className="shrink-0 whitespace-nowrap rounded bg-[rgba(255, 106, 26, 0.16)] px-1 py-0.5 text-[8.5px] font-semibold text-[var(--sw-mint)]">
                         {item.badge}
                       </span>
                     )}

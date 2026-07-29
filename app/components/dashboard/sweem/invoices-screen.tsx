@@ -62,7 +62,9 @@ export function InvoicesScreen() {
     enabled: !!wallet,
     queryFn: () => api.listInvoices(wallet!),
   });
-  const invoices = invoicesQuery.data ?? [];
+  // Stable identity: `data ?? []` produces a new array on every render, which made the metrics
+  // memo below recompute each time and defeated its own purpose.
+  const invoices = useMemo(() => invoicesQuery.data ?? [], [invoicesQuery.data]);
 
   const [payingId, setPayingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);

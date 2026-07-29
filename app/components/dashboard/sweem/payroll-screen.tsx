@@ -457,16 +457,28 @@ export function PayrollScreen() {
                     className="size-[14px] accent-[var(--sw-mint)]"
                   />
                 </th>
-                <th className="pb-2.5 font-medium">
+                <th
+                  className="pb-2.5 font-medium"
+                  aria-sort={sortKey === "name" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <SortHeader label="Recipient" col="name" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="pb-2.5 font-medium">
+                <th
+                  className="pb-2.5 font-medium"
+                  aria-sort={sortKey === "monthly" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <SortHeader label="Monthly" col="monthly" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="pb-2.5 font-medium">
+                <th
+                  className="pb-2.5 font-medium"
+                  aria-sort={sortKey === "streaming" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <SortHeader label="Streaming now" col="streaming" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="pb-2.5 font-medium">
+                <th
+                  className="pb-2.5 font-medium"
+                  aria-sort={sortKey === "advanced" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <SortHeader label="Drawn early" col="advanced" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
                 <th className="pb-2.5 font-medium">Status</th>
@@ -666,7 +678,9 @@ function SortHeader({
     <button
       type="button"
       onClick={() => onSort(col)}
-      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      // aria-sort is a property of the column header cell, not of a button inside it — the <th>
+      // carries it (see the callers). Announce the action here instead.
+      aria-label={`Sort by ${label}${on ? (dir === "asc" ? ", currently ascending" : ", currently descending") : ""}`}
       className={cn(
         "inline-flex items-center gap-1 uppercase tracking-wide transition-colors",
         on ? "text-[var(--sw-mint)]" : "text-[var(--sw-text-dim)] hover:text-[var(--sw-text-muted)]"

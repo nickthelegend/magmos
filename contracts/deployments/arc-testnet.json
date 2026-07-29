@@ -10,7 +10,16 @@
   "chainId": 5042002,
   "deployer": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
   "treasury": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
-  "MagmosPayroll_v1_noEWA": "0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093",
   "MagmosAdvance": "0xD3bB15A03982e928e38DcE7610930246867fa240",
-  "note2": "MagmosPayroll was redeployed to ship settleAdvance (Earned Wage Access). MagmosPayroll_v1_noEWA is the previous instance kept for provenance of earlier demo txs."
+  "note2": "MagmosPayroll was redeployed to ship settleAdvance (Earned Wage Access). MagmosPayroll_v1_noEWA is the previous instance kept for provenance of earlier demo txs.",
+  "superseded": {
+    "MagmosPayroll": [
+      "0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093",
+      "0x23888C1556FF5ebbA045D979f56C1151D0D0af47"
+    ],
+    "MagmosAdvance": [
+      "0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4"
+    ]
+  },
+  "note3": "superseded: previous Magmos deployments. sync-chain --check flags docs that still quote these. Earlier demo transactions against them remain valid on-chain."
 }

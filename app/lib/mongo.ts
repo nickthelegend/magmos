@@ -7,7 +7,6 @@ const uri = process.env.MONGODB_URI
 const dbName = process.env.MONGODB_DB || 'magmos'
 
 declare global {
-  // eslint-disable-next-line no-var
   var _magmosMongo: Promise<MongoClient> | undefined
 }
 

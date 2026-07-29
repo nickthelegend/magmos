@@ -67,7 +67,7 @@ export function FaqSection() {
           <div className="flex flex-col gap-4">
             <div className="grid h-[300px] w-full place-items-center overflow-hidden">
               <div className="relative flex h-full w-full items-center justify-center">
-                <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(196,245,107,0.22),transparent_70%)] blur-2xl" />
+                <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255, 106, 26, 0.22),transparent_70%)] blur-2xl" />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/faq.png" alt="Frequently asked questions" className="relative h-full w-full rounded-[20px] object-contain" />
               </div>

@@ -108,11 +108,11 @@ chain-first read model). Backend: `viem` public client on Arc RPC; EIP-191/SIWE 
 | Contract | Address |
 |---|---|
 | MagmosRegistry | `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501` |
-| MagmosPayroll | `0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093` |
+| MagmosPayroll | `0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5` |
 | MagmosVault | `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322` |
 | treasury / deployer | `0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226` |
 
-Explorer: https://testnet.arcscan.app/address/0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093
+Explorer: https://testnet.arcscan.app/address/0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5
 
 ### Phase 0 — Foundations ✅
 - [x] Deployer wallet generated → `0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226` (fund via faucet.circle.com)
