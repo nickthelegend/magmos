@@ -30,6 +30,13 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 
+/**
+ * The hosted Unlink deployment. `arc-testnet` is a real key in the SDK's ENVIRONMENTS map, resolving
+ * to https://arc-testnet-production-api.unlink.xyz, which reports chain_id 5042002 and pool
+ * 0x075b8d19…5dcda. Verified live, not assumed.
+ */
+const UNLINK_ENV = 'arc-testnet'
+
 /** A payout account inside the privacy pool. Bech32m, HRP `unlink` → `unlink1…`. */
 export type SealedAddress = string
 
@@ -61,10 +68,15 @@ export interface SealProvider {
 /**
  * Pool-token scaling.
  *
- * Magmos denominates everything in 6-dp micro-USDC. Unlink's arc-testnet pool settles a mock USDCm
- * with **18** decimals — and Manila's own `.dev.vars.example` ships `UNLINK_TOKEN_DECIMALS=6`,
- * which underpays by 1e12. The default here is therefore 18, and the conversion is written to be
- * correct in both directions rather than assuming the pool token has more decimals than USDC.
+ * Magmos denominates everything in 6-dp micro-USDC. So does the pool, as it turns out.
+ *
+ * Measured, not assumed: the live engine reports pool 0x075b8d19…5dcda, and that pool holds
+ * 1,238.126662 of token 0x3600…0000, which reads back as name "USDC", symbol "USDC", decimals **6**.
+ * It is Arc's real USDC, not an 18-decimal mock. An earlier revision of this file asserted the
+ * opposite and defaulted to 18, which would have scaled every salary by 1e12.
+ *
+ * The conversion still works in both directions, because UNLINK_TOKEN_ADDRESS is configurable and a
+ * future pool token need not be 6-dp.
  */
 export function toPoolUnits(amountMicros: bigint, poolDecimals: number): bigint {
   const d = poolDecimals - 6
@@ -252,22 +264,26 @@ class UnlinkSealProvider implements SealProvider {
 
   private async adminHandle() {
     const { admin } = await this.sdk()
-    return admin.createUnlinkAdmin({ environment: 'arc-testnet', apiKey: this.apiKey })
+    return admin.createUnlinkAdmin({ environment: UNLINK_ENV, apiKey: this.apiKey })
   }
 
   private async treasuryClient() {
     const { client } = await this.sdk()
     const a = await this.adminHandle()
-    return client.createUnlinkClient({
-      environment: 'arc-testnet',
+    const c = client.createUnlinkClient({
+      environment: UNLINK_ENV,
       account: client.account.fromMnemonic({ mnemonic: this.treasuryMnemonic }),
       // The admin handle is called in-process, so the admin key never crosses a network boundary.
-      register: (payload: unknown) => a.users.register(payload),
+      register: (payload: unknown) => a.users.register(payload as never),
       authorizationToken: {
         provider: ({ unlinkAddress }: { unlinkAddress: string }) =>
-          a.authorizationTokens.issue({ subjectType: 'user', unlinkAddress }),
+          a.authorizationTokens.issue({ subjectType: 'user', unlinkAddress } as never),
       },
     })
+    // Idempotent and lazily cached by the SDK — safe to call on every use, and it means the first
+    // transfer of a fresh treasury cannot fail with "unregistered account".
+    await c.ensureRegistered()
+    return c
   }
 
   async provisionRecipient(label: string) {
@@ -277,44 +293,62 @@ class UnlinkSealProvider implements SealProvider {
     const mnemonic = generateMnemonic(english)
     const account = client.account.fromMnemonic({ mnemonic })
     const address: string = await account.getAddress()
-    await a.users.register(await account.getRegistrationPayload())
+    // `toRegistrationPayload` lives on the `account` namespace and takes the account itself as the
+    // registration provider — `UnlinkLocalAccount` extends `UnlinkRegistrationProvider`. There is no
+    // `account.getRegistrationPayload()`; an earlier revision called one and would have thrown.
+    await a.users.register(await client.account.toRegistrationPayload(account))
     // The mnemonic is returned rather than discarded: a recipient who cannot spend a sealed
     // balance has no way to send it home, which would remove the entire point of the portal.
     return { address, mnemonic, label } as { address: SealedAddress; mnemonic?: string }
   }
 
-  async seal(to: SealedAddress, amountMicros: bigint, memo?: string): Promise<SealedTransferResult> {
+  /**
+   * Send `amountMicros` to a sealed address.
+   *
+   * The interface's `memo` parameter is simply not implemented here. The SDK's transfer takes no
+   * memo, and that is the right default regardless — a memo is metadata, and metadata attached to a
+   * confidential transfer is exactly what this rail exists to remove. Run linkage lives in the
+   * employer's own audit trail instead.
+   */
+  async seal(to: SealedAddress, amountMicros: bigint): Promise<SealedTransferResult> {
     if (!isSealedAddress(to)) throw new Error(`invalid sealed address: ${to}`)
     const c = await this.treasuryClient()
+    // Real parameter names, checked against the SDK's SingleTransferParams: `recipientAddress`,
+    // not `to`.
     const handle = await c.transfer({
-      to,
       token: this.tokenAddress,
       amount: toPoolUnits(amountMicros, this.tokenDecimals).toString(),
-      memo,
+      recipientAddress: to,
     })
-    // Deliberately NOT awaiting settlement. The provider polls up to ~120s; a serverless function
-    // caps well below that. Persist the id, return, and reconcile from the cron.
-    return { ref: String(handle.txId ?? handle.id), status: 'pending' }
+    // Deliberately NOT awaiting settlement. /info/environment reports Arc's canonical finality
+    // boundary as `rpc_tag:finalized` — minutes, far past any serverless timeout. Persist the id and
+    // reconcile via status().
+    //
+    // `handle.txHash` is documented as always null here; the relayer hash only exists after
+    // broadcast. Returning it as a settlement hash would be a fabrication, so it is omitted.
+    return { ref: handle.txId, status: 'pending' }
   }
 
   async status(ref: string): Promise<SealedTransferResult> {
     const c = await this.treasuryClient()
-    const s = await c.pollTransactionStatus(ref, { once: true })
-    const state = String(s?.status ?? '').toLowerCase()
+    const r = await c.pollTransactionStatus(ref)
+    const state = String(r?.status ?? '').toLowerCase()
     return {
       ref,
-      txHash: s?.transactionHash as `0x${string}` | undefined,
+      // `txHash` on TransactionResult — not `transactionHash`.
+      txHash: (r?.txHash ?? undefined) as `0x${string}` | undefined,
+      // "processed" and "failed" are the SDK's only terminal statuses; everything else is in flight.
       status: state === 'processed' ? 'settled' : state === 'failed' ? 'failed' : 'pending',
     }
   }
 
   async treasuryBalanceMicros(): Promise<bigint> {
     const c = await this.treasuryClient()
-    const balances = await c.getBalances()
-    const match = (balances ?? []).find(
-      (b: { token?: string }) => b.token?.toLowerCase() === this.tokenAddress.toLowerCase()
-    )
-    return fromPoolUnits(BigInt(match?.amount ?? 0), this.tokenDecimals)
+    // `getBalances()` returns `{ balances: [...] }` — an object, not the array an earlier revision
+    // called `.find()` on. `balanceOf` asks for the one token directly and returns a decimal string
+    // (or null when the treasury holds none of it).
+    const raw = await c.balanceOf(this.tokenAddress)
+    return fromPoolUnits(BigInt(raw ?? 0), this.tokenDecimals)
   }
 }
 
@@ -325,15 +359,15 @@ let cached: SealProvider | null = null
 /**
  * The active provider. Live when Unlink credentials are configured, deterministic mock otherwise.
  *
- * `UNLINK_TOKEN_DECIMALS` defaults to **18** — the arc-testnet pool token is a mock USDCm at 18
- * decimals, not 6. Defaulting to 6 here would silently underpay every salary by 1e12.
+ * `UNLINK_TOKEN_DECIMALS` defaults to **6**, matching the token the live arc-testnet pool actually
+ * settles (verified on-chain — see the note on toPoolUnits).
  */
 export function sealProvider(): SealProvider {
   if (cached) return cached
   const apiKey = process.env.UNLINK_API_KEY
   const mnemonic = process.env.TREASURY_UNLINK_MNEMONIC
   const token = process.env.UNLINK_TOKEN_ADDRESS
-  const decimals = Number(process.env.UNLINK_TOKEN_DECIMALS ?? 18)
+  const decimals = Number(process.env.UNLINK_TOKEN_DECIMALS ?? 6)
 
   cached =
     apiKey && mnemonic && token
@@ -356,6 +390,6 @@ export function sealReadiness() {
     apiKey: Boolean(process.env.UNLINK_API_KEY),
     treasuryMnemonic: Boolean(process.env.TREASURY_UNLINK_MNEMONIC),
     tokenAddress: Boolean(process.env.UNLINK_TOKEN_ADDRESS),
-    tokenDecimals: Number(process.env.UNLINK_TOKEN_DECIMALS ?? 18),
+    tokenDecimals: Number(process.env.UNLINK_TOKEN_DECIMALS ?? 6),
   }
 }
