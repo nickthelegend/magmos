@@ -55,7 +55,7 @@ Magmos turns payroll into a **continuous stream** on Arc (Circle's USDC-native L
 - **5 contracts live on Arc testnet, 49 passing tests** (unit + fuzz + integration + a
   reentrancy-attack test), **independently audited (3-agent review) with every finding fixed and
   redeployed.**
-  - MagmosPayroll `0xA837eB367585399b972cDa816dB9DB3D74281287`
+  - MagmosPayroll `0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B`
   - MagmosRegistry `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501`
   - MagmosVault `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322`
   - MagmosYieldVault `0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2`

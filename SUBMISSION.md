@@ -12,7 +12,7 @@ way to check it.
 | Live app | https://magmos.vercel.app |
 | Repository | https://github.com/nickthelegend/magmos |
 | Demo video | `demo-recording/renders/magmos-launch-and-demo.mp4` (5:59 — launch reel + full narrated demo) |
-| Block explorer | https://testnet.arcscan.app/address/0xA837eB367585399b972cDa816dB9DB3D74281287 |
+| Block explorer | https://testnet.arcscan.app/address/0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B |
 | Pitch deck prompt | [PITCH-DECK-PROMPT.md](PITCH-DECK-PROMPT.md) |
 
 ## Gates

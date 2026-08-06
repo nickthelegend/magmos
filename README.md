@@ -9,7 +9,7 @@ Stream USDC to anyone in the world, settled per second. Claim anytime. Bridge ho
 
 <p align="center">
 Built for the <b>Stablecoin Commerce Stack Challenge</b> — Track 1: Best Cross-Border Payments & Remittances Experience (UAE → Global).<br/>
-🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0xA837eB367585399b972cDa816dB9DB3D74281287">arcscan</a>
+🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B">arcscan</a>
 </p>
 
 ---
@@ -79,7 +79,7 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 
 | Contract | Address |
 |---|---|
-| MagmosPayroll | `0xA837eB367585399b972cDa816dB9DB3D74281287` |
+| MagmosPayroll | `0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B` |
 | MagmosAdvance (earned wage access) | `0x532791bC95152424739950a90AC986FF196097FC` |
 | MagmosEquityVault (oracle-priced RSU vesting) | `0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7` |
 | PythPriceRelay (AAPL/USD feed) | `0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B` |
@@ -140,11 +140,58 @@ cd app && vercel link && vercel --prod   # or connect the repo in the Vercel das
 - **USYC model** — the yield vault demonstrates "payroll that pays for itself"; production routes
   to Circle/Hashnote USYC.
 
+## Confidential payroll
+
+Streaming payroll on a public chain has an obvious problem: everyone's salary is readable by anyone
+with a block explorer. Magmos splits the difference the way payroll actually needs it —
+**confidential to the public, auditable to the employer.**
+
+A payroll run settles in **one** transaction, `settleAllSealed(poolId, sealRef)`. That is the whole
+calldata: a pool and an opaque commitment. No recipient, no per-person amount — not in the input,
+not in the logs. What stays public is the aggregate: that an org ran payroll, the total, and the
+headcount. That is deliberate. An employer's total spend is the part that should remain auditable;
+an individual's salary is the secret.
+
+Verify it yourself rather than taking the claim:
+
+```bash
+cd app && node scripts/verify-privacy.mjs
+```
+
+It takes the adversary's view — transaction hashes only, reading what any explorer reads — against
+an observer who **already knows every employee address**, because if the strongest adversary can't
+attribute a payment, a stranger certainly can't. It also keeps a known-leaky transaction under test
+as a control, so the pass means something.
+
+```
+employee identities recoverable   : NO
+per-recipient amounts recoverable : NO
+```
+
+### What this does not yet cover
+
+The **Unlink shielded delivery leg has not been executed.** It needs `UNLINK_API_KEY`, which cannot
+be self-issued. The code path is written and checked against the SDK, but no shielded transfer has
+been made, so nothing here claims one has. What is proven is the settlement leg; that is exactly as
+far as the claim goes.
+
+Getting there is one command once the key is in `app/.env.local`:
+
+```bash
+cd app && node scripts/sealed-preflight.mjs
+```
+
 ## Honest status
 
 Arc is testnet-only — so is Magmos. The CCTP destination mint and passkey flows are wired and
 compile; end-to-end verification of those two requires a wallet on the destination chain and a
-browser biometric respectively. Everything else above is proven live on-chain.
+browser biometric respectively.
+
+An earlier revision of this project settled payroll one employee at a time and described that as
+private. It was not: `settleSealed`'s calldata carries the recipient and the amount, and calldata is
+public regardless of what an event emits. That is fixed — payroll now goes through
+`settleAllSealed` — and the verification script keeps the old path under test so the mistake cannot
+quietly return.
 
 ---
 

@@ -41,7 +41,7 @@ one-env-var switch — see below.)
 ## Live contracts (Arc testnet, chain 5042002)
 | | Address |
 |---|---|
-| MagmosPayroll | `0xA837eB367585399b972cDa816dB9DB3D74281287` |
+| MagmosPayroll | `0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B` |
 | MagmosRegistry | `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501` |
 | MagmosVault | `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322` |
 | MagmosUSDC (faucet test token) | `0x3248CcD4c276b4785f81f8c1207094262F67a33C` |
