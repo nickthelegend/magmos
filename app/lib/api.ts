@@ -170,6 +170,10 @@ export function useSweemApi() {
 
   return {
     address: wallet,
+    // Exposed so feature modules (e.g. confidential payroll) can call owner-gated routes without
+    // re-implementing the EIP-191 signing dance. One signature covers a 5-minute window.
+    signAuth,
+    authedFetch,
 
     // queries
     orgQuery,
