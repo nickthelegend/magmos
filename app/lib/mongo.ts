@@ -37,4 +37,13 @@ export const COLLECTIONS = {
   invoices: 'invoices',
   apiKeys: 'apiKeys',
   webhooks: 'webhooks',
+  // ---- confidential payroll ----
+  /** One drafted/settled payroll run. Carries the policy verdict that produced it. */
+  payrollRuns: 'payrollRuns',
+  /** One recipient's line within a run, incl. the sealed-delivery reference. */
+  payrollPayments: 'payrollPayments',
+  /** Per-org control envelope (caps, band, allowlist). */
+  payrollControls: 'payrollControls',
+  /** Append-only audit trail — "open the envelope". */
+  auditLog: 'auditLog',
 } as const
