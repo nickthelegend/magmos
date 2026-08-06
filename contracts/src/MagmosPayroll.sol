@@ -33,6 +33,11 @@ contract MagmosPayroll is ReentrancyGuard {
     uint256 public constant BPS_DENOM = 10_000;
     /// @notice Role bit allowing an account to pause/resume streams on a pool.
     uint8 public constant PAUSER_ROLE = 0x01;
+    /// @notice Role bit allowing an account to settle accrued pay for CONFIDENTIAL delivery.
+    /// @dev Granted by the org to its own payroll signer via `grantPoolRole`. Deliberately reuses
+    ///      the existing per-pool role system rather than a global module: sealing is an
+    ///      org-scoped decision, so each org opts in for its own pool and can revoke at any time.
+    uint8 public constant SEALER_ROLE = 0x02;
 
     struct Stream {
         uint256 rateAmount; // raw token units earned per `ratePeriod`
@@ -100,6 +105,17 @@ contract MagmosPayroll is ReentrancyGuard {
     event PoolRoleGranted(bytes32 indexed poolId, address indexed account, uint8 role);
     event PoolRoleRevoked(bytes32 indexed poolId, address indexed account, uint8 role);
     event AdvanceModuleSet(address indexed module);
+    /// @notice Accrued pay was settled for confidential delivery. Note what is NOT here: the
+    ///         recipient's payout address and the delivered amount off-ledger. `sealRef` is an
+    ///         opaque commitment to the shielded transfer, reconcilable only by the employer.
+    event PaySealed(
+        bytes32 indexed poolId,
+        address indexed employee,
+        uint256 amount,
+        bytes32 indexed sealRef,
+        uint256 remainingClaimable,
+        uint256 timestamp
+    );
     /// @notice A portion of accrued pay was settled early (earned-wage advance) to `to`.
     event AdvanceSettled(
         bytes32 indexed poolId,
@@ -307,6 +323,60 @@ contract MagmosPayroll is ReentrancyGuard {
         IERC20(pool.token).safeTransfer(to, amount);
     }
 
+    /// @notice Settle accrued pay so the org can deliver it CONFIDENTIALLY, off the public ledger.
+    ///
+    /// @dev The point of this function is what it does NOT reveal. Accrual stays public and
+    ///      verifiable — anyone can audit that a stream is running and that pay was settled — while
+    ///      the amount actually delivered to the worker, and who they are, move privately off-chain
+    ///      (a shielded transfer). `sealRef` is an opaque commitment to that delivery, so the
+    ///      on-chain record can be reconciled against it later without publishing it.
+    ///
+    ///      Two deliberate safety properties:
+    ///        1. Funds can only ever go to `pool.org`. A compromised sealer cannot redirect payroll
+    ///           to itself — the worst it can do is move the org's own money back to the org, which
+    ///           the org can already do. `to` is not a parameter for exactly this reason.
+    ///        2. `amount` is bounded by accrual using the same `_accrued`/`_effectiveEnd` pair
+    ///           `claim()` uses, so a seal can never settle pay that was not earned.
+    ///
+    ///      Trust model, stated plainly: this hands the org custody of already-earned pay in order
+    ///      to deliver it privately. That is the same trust an employer has in any payroll system
+    ///      that pays from a treasury, but it is strictly more than the pull-based `claim()` path,
+    ///      where the worker alone moves their money. Orgs that do not want it simply never grant
+    ///      SEALER_ROLE, and every stream keeps working exactly as before.
+    ///
+    /// @return remainingClaimable Claimable left on the stream immediately after sealing.
+    function settleSealed(bytes32 poolId, address employee, uint256 amount, bytes32 sealRef)
+        external
+        nonReentrant
+        returns (uint256 remainingClaimable)
+    {
+        Pool storage pool = _pools[poolId];
+        if (!pool.exists) revert PoolNotFound();
+        if (!_hasPoolRole(poolId, pool, msg.sender, SEALER_ROLE)) revert NotAuthorized();
+        Stream storage s = _streams[poolId][employee];
+        if (!s.exists) revert StreamNotFound();
+        if (amount == 0) revert ZeroClaimable();
+
+        uint64 effEnd = _effectiveEnd(s);
+        uint256 available = s.pendingBalance + _accrued(s, effEnd);
+        if (amount > available) revert ExceedsClaimable();
+        if (pool.balance < amount) revert InsufficientPoolBalance();
+
+        // effects (checks-effects-interactions + nonReentrant) — identical crystallize-and-debit
+        // to `settleAdvance`, so a sealed settlement and a claim can never disagree about what has
+        // been earned or what is left.
+        pool.totalClaimed += amount;
+        pool.balance -= amount;
+        s.claimedAt = effEnd;
+        s.totalPausedSecs = 0;
+        s.pendingBalance = available - amount;
+        remainingClaimable = s.pendingBalance;
+
+        emit PaySealed(poolId, employee, amount, sealRef, remainingClaimable, block.timestamp);
+
+        IERC20(pool.token).safeTransfer(pool.org, amount);
+    }
+
     // ------------------------------------------------------------------ stream control
 
     function pauseStream(bytes32 poolId, address employee) external {
@@ -499,11 +569,7 @@ contract MagmosPayroll is ReentrancyGuard {
         return _employeePools[employee];
     }
 
-    function hasPoolRole(bytes32 poolId, address account, uint8 role)
-        external
-        view
-        returns (bool)
-    {
+    function hasPoolRole(bytes32 poolId, address account, uint8 role) external view returns (bool) {
         return _hasPoolRole(poolId, _pools[poolId], account, role);
     }
 
@@ -517,8 +583,14 @@ contract MagmosPayroll is ReentrancyGuard {
         if (token == address(0)) revert ZeroAddress();
         poolId = poolIdFor(msg.sender, token);
         if (_pools[poolId].exists) revert PoolAlreadyExists();
-        _pools[poolId] =
-            Pool({org: msg.sender, token: token, totalDeposited: 0, totalClaimed: 0, balance: 0, exists: true});
+        _pools[poolId] = Pool({
+            org: msg.sender,
+            token: token,
+            totalDeposited: 0,
+            totalClaimed: 0,
+            balance: 0,
+            exists: true
+        });
         _orgPools[msg.sender].push(poolId);
         emit PoolCreated(poolId, msg.sender, token);
     }

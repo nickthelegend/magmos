@@ -8,6 +8,8 @@ import registryAbi from './abi/MagmosRegistry.json'
 import vaultAbi from './abi/MagmosVault.json'
 import yieldVaultAbi from './abi/MagmosYieldVault.json'
 import advanceAbi from './abi/MagmosAdvance.json'
+import equityVaultAbi from './abi/MagmosEquityVault.json'
+import pythRelayAbi from './abi/PythPriceRelay.json'
 
 export const NETWORK = 'arc-testnet' as const
 
@@ -20,10 +22,10 @@ export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
 
 // ----- Deployed Magmos core (Arc testnet) -----
 export const MAGMOS_PAYROLL = (process.env.NEXT_PUBLIC_MAGMOS_PAYROLL ||
-  '0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5') as `0x${string}`
+  '0xA837eB367585399b972cDa816dB9DB3D74281287') as `0x${string}`
 // Earned Wage Access module — lets a worker draw wages already streamed-and-earned.
 export const MAGMOS_ADVANCE = (process.env.NEXT_PUBLIC_MAGMOS_ADVANCE ||
-  '0xD3bB15A03982e928e38DcE7610930246867fa240') as `0x${string}`
+  '0x532791bC95152424739950a90AC986FF196097FC') as `0x${string}`
 export const MAGMOS_REGISTRY = (process.env.NEXT_PUBLIC_MAGMOS_REGISTRY ||
   '0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501') as `0x${string}`
 export const MAGMOS_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_VAULT ||
@@ -32,12 +34,28 @@ export const MAGMOS_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_VAULT ||
 // rail; routes to USYC in production.
 export const MAGMOS_YIELD_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_YIELD ||
   '0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2') as `0x${string}`
+// Programmable equity: RSU shares vest on-chain and settle in USDC at a live oracle price.
+export const MAGMOS_EQUITY_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_EQUITY_VAULT ||
+  '0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7') as `0x${string}`
+// Pyth-shaped on-chain price relay (fed the real AAPL/USD feed from Pyth Hermes). Swapping this
+// for canonical Pyth is an address change, not a code change — the vault reads IPyth either way.
+export const PYTH_PRICE_RELAY = (process.env.NEXT_PUBLIC_PYTH_PRICE_RELAY ||
+  '0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B') as `0x${string}`
+/** Pyth's canonical AAPL/USD feed id. */
+export const AAPL_USD_FEED =
+  '0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688' as const
+
+/** Role bit letting the org's payroll signer settle accrued pay for confidential delivery.
+ *  Pairs with the pre-existing PAUSER_ROLE declared below. */
+export const SEALER_ROLE = 0x02
 
 export const PAYROLL_ABI = payrollAbi as Abi
 export const REGISTRY_ABI = registryAbi as Abi
 export const VAULT_ABI = vaultAbi as Abi
 export const YIELD_VAULT_ABI = yieldVaultAbi as Abi
 export const ADVANCE_ABI = advanceAbi as Abi
+export const EQUITY_VAULT_ABI = equityVaultAbi as Abi
+export const PYTH_RELAY_ABI = pythRelayAbi as Abi
 
 // ----- Arc testnet tokens -----
 export const USDC = (process.env.NEXT_PUBLIC_USDC ||

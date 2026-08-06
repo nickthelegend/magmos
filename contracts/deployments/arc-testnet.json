@@ -1,5 +1,5 @@
 {
-  "MagmosPayroll": "0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5",
+  "MagmosPayroll": "0xA837eB367585399b972cDa816dB9DB3D74281287",
   "MagmosRegistry": "0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501",
   "MagmosVault": "0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322",
   "MagmosYieldVault": "0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2",
@@ -10,16 +10,21 @@
   "chainId": 5042002,
   "deployer": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
   "treasury": "0xF1a800BA07Bd0b55Dce43be2e837933AF3e53226",
-  "MagmosAdvance": "0xD3bB15A03982e928e38DcE7610930246867fa240",
+  "MagmosAdvance": "0x532791bC95152424739950a90AC986FF196097FC",
   "note2": "MagmosPayroll was redeployed to ship settleAdvance (Earned Wage Access). MagmosPayroll_v1_noEWA is the previous instance kept for provenance of earlier demo txs.",
   "superseded": {
     "MagmosPayroll": [
       "0xc810cabdCb4b22df29A54bdb0E124EE3ABA46093",
-      "0x23888C1556FF5ebbA045D979f56C1151D0D0af47"
+      "0x23888C1556FF5ebbA045D979f56C1151D0D0af47",
+      "0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5"
     ],
     "MagmosAdvance": [
-      "0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4"
+      "0x360c66B83C26AfAE457A4022bDdAAb58ADF9E7C4",
+      "0xD3bB15A03982e928e38DcE7610930246867fa240"
     ]
   },
-  "note3": "superseded: previous Magmos deployments. sync-chain --check flags docs that still quote these. Earlier demo transactions against them remain valid on-chain."
+  "note3": "superseded: previous Magmos deployments. sync-chain --check flags docs that still quote these. Earlier demo transactions against them remain valid on-chain.",
+  "PythPriceRelay": "0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B",
+  "MagmosEquityVault": "0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7",
+  "note4": "MagmosPayroll redeployed to ship settleSealed + SEALER_ROLE (confidential settlement of streamed pay). MagmosAdvance redeployed with it because setAdvanceModule is one-time-forever."
 }

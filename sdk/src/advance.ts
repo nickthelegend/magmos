@@ -7,7 +7,7 @@
 import type { Address, PublicClient } from 'viem'
 
 export const MAGMOS_ADVANCE_ADDRESS =
-  '0xD3bB15A03982e928e38DcE7610930246867fa240' as const satisfies Address
+  '0x532791bC95152424739950a90AC986FF196097FC' as const satisfies Address
 
 /** Minimal ABI slice — keeps the published bundle small. */
 export const advanceAbi = [

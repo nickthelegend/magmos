@@ -49,7 +49,7 @@ export function LiveTicker({
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [baseRaw, rateRaw, periodSecs, anchorAt, active, decimals]);
+  }, [baseRaw, rateRaw, periodSecs, anchorAt, active, decimals, reduceMotion]);
 
   const [intPart, fracFull] = display.split(".");
   const fracPart = (fracFull ?? "").slice(0, fracDigits);

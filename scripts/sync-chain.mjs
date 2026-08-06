@@ -25,6 +25,8 @@ const CONTRACTS = [
   "MagmosRegistry",
   "MagmosVault",
   "MagmosYieldVault",
+  "MagmosEquityVault",
+  "PythPriceRelay",
 ];
 
 // Which ABIs each app actually imports (keeps bundles honest).
@@ -42,6 +44,8 @@ const ADDRESS_FILES = [
   join(ROOT, "employee/src/lib/magmos.ts"),
 ];
 const ADDRESS_MAP = {
+  MAGMOS_EQUITY_VAULT: "MagmosEquityVault",
+  PYTH_PRICE_RELAY: "PythPriceRelay",
   MAGMOS_PAYROLL: "MagmosPayroll",
   MAGMOS_ADVANCE: "MagmosAdvance",
   MAGMOS_REGISTRY: "MagmosRegistry",
@@ -63,6 +67,8 @@ const ENV_FILES = [
   join(ROOT, "employee/.env.example"),
 ];
 const ENV_MAP = {
+  NEXT_PUBLIC_MAGMOS_EQUITY_VAULT: "MagmosEquityVault",
+  NEXT_PUBLIC_PYTH_PRICE_RELAY: "PythPriceRelay",
   NEXT_PUBLIC_MAGMOS_PAYROLL: "MagmosPayroll",
   NEXT_PUBLIC_MAGMOS_ADVANCE: "MagmosAdvance",
   NEXT_PUBLIC_MAGMOS_REGISTRY: "MagmosRegistry",

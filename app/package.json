@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "node ../demo-recording/verify-all.mjs",
     "sync-chain": "node ../scripts/sync-chain.mjs",
-    "check": "tsc --noEmit && next lint && node ../scripts/sync-chain.mjs --check"
+    "check": "tsc --noEmit && next lint && bun test lib/ && node ../scripts/sync-chain.mjs --check",
+    "test": "bun test lib/"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.210",

@@ -9,7 +9,7 @@ Stream USDC to anyone in the world, settled per second. Claim anytime. Bridge ho
 
 <p align="center">
 Built for the <b>Stablecoin Commerce Stack Challenge</b> — Track 1: Best Cross-Border Payments & Remittances Experience (UAE → Global).<br/>
-🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5">arcscan</a>
+🟢 <a href="https://magmos.vercel.app"><b>Live app → magmos.vercel.app</b></a> · <b>Arc testnet</b> chain 5042002 · <a href="https://testnet.arcscan.app/address/0xA837eB367585399b972cDa816dB9DB3D74281287">arcscan</a>
 </p>
 
 ---
@@ -79,8 +79,10 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 
 | Contract | Address |
 |---|---|
-| MagmosPayroll | `0x6d3bf728D8Ed8A12b58339dbA6a4287D88e6B8c5` |
-| MagmosAdvance (earned wage access) | `0xD3bB15A03982e928e38DcE7610930246867fa240` |
+| MagmosPayroll | `0xA837eB367585399b972cDa816dB9DB3D74281287` |
+| MagmosAdvance (earned wage access) | `0x532791bC95152424739950a90AC986FF196097FC` |
+| MagmosEquityVault (oracle-priced RSU vesting) | `0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7` |
+| PythPriceRelay (AAPL/USD feed) | `0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B` |
 | MagmosRegistry | `0x9C73E54e78c0e1d5C46aC996A126Ba5B9d4fC501` |
 | MagmosVault | `0x9F4AeADcc5C21ACB1dC96C66947E4373C6abF322` |
 | MagmosYieldVault | `0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2` |
