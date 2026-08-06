@@ -75,12 +75,22 @@ const DECISION_STYLE: Record<Decision, { label: string; cls: string; Icon: typeo
  * deterministic gate decides. So the verdict — not the agent's prose — is the loudest element, and
  * a refusal is styled as a different category from a hold rather than a stronger warning.
  */
+type SettleResponse = {
+  runId: string;
+  status: string;
+  settled: { employee: string; name?: string; amountUsdc: number; txHash: string; sealRef: string }[];
+  failed: { employee: string; name?: string; error: string }[];
+  confidentialDelivery: { ran: boolean; provider?: string; reason?: string };
+};
+
 export function PrivatePayrollScreen() {
   const api = useSweemApi();
   const wallet = api.address;
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AgentResponse | null>(null);
+  const [settling, setSettling] = useState(false);
+  const [settleResult, setSettleResult] = useState<SettleResponse | null>(null);
 
   const auditQuery = useQuery<AuditRow[]>({
     queryKey: ["payrollAudit", wallet],
@@ -97,6 +107,7 @@ export function PrivatePayrollScreen() {
     if (!cmd || !wallet) return;
     setBusy(true);
     try {
+      setSettleResult(null);
       const r = await api.authedFetch(`/api/orgs/${wallet}/payroll`, "POST", { instruction: cmd });
       const data = r.data as AgentResponse;
       setResult(data);
@@ -109,6 +120,33 @@ export function PrivatePayrollScreen() {
       toast.error((e as Error).message.slice(0, 160));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Execute the run. Deliberately a second call rather than a continuation of drafting: the draft is
+   * a proposal, and nothing moves until a human presses this.
+   */
+  async function settle(runId: string) {
+    if (!wallet) return;
+    setSettling(true);
+    try {
+      const r = await api.authedFetch(`/api/orgs/${wallet}/payroll/${runId}/settle`, "POST", {});
+      if (r.status >= 400) {
+        // Surface the server's own reason. A 503 here means a missing signer key or an ungranted
+        // SEALER_ROLE — reporting a flat "failed" would send the operator looking in the wrong place.
+        toast.error(r.data?.error ?? "Settlement failed", { description: r.data?.detail });
+        return;
+      }
+      const data = r.data as SettleResponse;
+      setSettleResult(data);
+      if (data.failed.length) toast.error(`${data.settled.length} settled, ${data.failed.length} failed`);
+      else toast.success(`Settled ${data.settled.length} recipient(s) on Arc`);
+      await auditQuery.refetch();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSettling(false);
     }
   }
 
@@ -272,7 +310,66 @@ export function PrivatePayrollScreen() {
               </table>
             </div>
           )}
+
+          {/* Settle is a separate authenticated call, never a side effect of drafting. It appears
+              only when the gate produced an executable or approvable verdict — a refused run has no
+              button at all, because the state machine has no edge to offer. */}
+          {result?.runId && v.decision !== "refuse" && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--sw-border)] pt-3.5">
+              <button
+                onClick={() => settle(result.runId!)}
+                disabled={settling}
+                className="rounded-full bg-[var(--sw-mint)] px-4 py-2 text-[13px] font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+              >
+                {settling
+                  ? "Settling on Arc…"
+                  : v.decision === "approve"
+                    ? "Approve and settle"
+                    : "Settle on Arc"}
+              </button>
+              <span className="text-[12px] text-[var(--sw-text-muted)]">
+                {v.decision === "approve"
+                  ? "Requires a second approver — the wallet that drafted this run cannot approve it."
+                  : "Signs one settleSealed per recipient from the delegated payroll signer."}
+              </span>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* settlement receipts — real hashes, or a real explanation of why not */}
+      {settleResult && (
+        <SweemCard className="mt-4">
+          <CardLabel>Settlement</CardLabel>
+          {settleResult.settled.map((s) => (
+            <div
+              key={s.employee}
+              className="mt-2.5 flex flex-wrap items-baseline justify-between gap-2 border-t border-[var(--sw-border)] pt-2.5 text-[13px] first:border-t-0"
+            >
+              <span className="text-[var(--sw-text)]">{s.name || s.employee}</span>
+              <span className="tabular-nums text-[var(--sw-text)]">{s.amountUsdc.toFixed(6)} USDC</span>
+              <a
+                href={EXPLORER_TX(s.txHash)}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[11.5px] text-[var(--sw-mint)] underline underline-offset-2"
+              >
+                {s.txHash.slice(0, 12)}…{s.txHash.slice(-8)}
+              </a>
+            </div>
+          ))}
+          {settleResult.failed.map((f) => (
+            <p key={f.employee} className="mt-2 text-[12.5px] text-[#ef4444]">
+              {f.name || f.employee}: {f.error}
+            </p>
+          ))}
+          {/* Never let a settled-only run read as a delivered one. */}
+          <p className="mt-3 rounded-[10px] bg-[rgba(0,0,0,0.2)] px-3 py-2 text-[12px] text-[var(--sw-text-muted)]">
+            {settleResult.confidentialDelivery.ran
+              ? `Confidential delivery completed via ${settleResult.confidentialDelivery.provider}. Amounts and counterparties are not readable on the explorer.`
+              : settleResult.confidentialDelivery.reason}
+          </p>
+        </SweemCard>
       )}
 
       {/* audit trail */}

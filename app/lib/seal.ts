@@ -220,12 +220,34 @@ class UnlinkSealProvider implements SealProvider {
     private readonly tokenDecimals: number
   ) {}
 
+  /**
+   * Load the Unlink SDK at runtime, not at build time.
+   *
+   * `as string` does NOT stop Turbopack resolving these — it still walks the literal, fails to find
+   * an uninstalled optional dependency, and 500s the *entire route* at compile time. That took down
+   * settlement even when Unlink was never going to be called. The magic comments are the documented
+   * escape hatch: `turbopackIgnore` leaves the expression untouched in the output, `webpackIgnore`
+   * does the same for a webpack build.
+   *
+   * Consequence, deliberately: a missing SDK now fails here, when a shielded transfer is actually
+   * attempted, with a message that says what to install — instead of taking the route down at boot.
+   */
   private async sdk() {
-    const [client, admin] = await Promise.all([
-      import('@unlink-xyz/sdk/client' as string),
-      import('@unlink-xyz/sdk/admin' as string),
-    ])
-    return { client, admin }
+    try {
+      // Specifiers held in variables so TypeScript does not try to resolve types for a package that
+      // is optional by design, on top of the magic comments that stop the bundler resolving them.
+      const CLIENT = '@unlink-xyz/sdk/client'
+      const ADMIN = '@unlink-xyz/sdk/admin'
+      const [client, admin] = await Promise.all([
+        import(/* webpackIgnore: true */ /* turbopackIgnore: true */ CLIENT),
+        import(/* webpackIgnore: true */ /* turbopackIgnore: true */ ADMIN),
+      ])
+      return { client, admin }
+    } catch (e) {
+      throw new Error(
+        `Unlink SDK is not installed — run \`bun add @unlink-xyz/sdk\` to enable shielded transfers. (${(e as Error).message.slice(0, 120)})`
+      )
+    }
   }
 
   private async adminHandle() {
