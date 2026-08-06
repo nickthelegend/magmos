@@ -21,11 +21,11 @@ describe('deterministic parser needs no model', () => {
   test('max bonus flagged, amount NOT parsed from text', () => {
     const a = parseInstruction('run payroll with the maximum acceptable bonus', roster)
     expect(a).toMatchObject({ kind: 'run_payroll', maxBonus: true })
-    expect((a as any).bonusMicros).toBeUndefined()
+    expect(a.kind === 'run_payroll' && a.bonusMicros).toBeFalsy()
   })
   test('explicit bonus read only near the word bonus', () => {
     const a = parseInstruction('run payroll with a 500 usdc bonus', roster)
-    expect((a as any).bonusMicros).toBe(usdc(500))
+    expect(a.kind === 'run_payroll' ? a.bonusMicros : undefined).toBe(usdc(500))
   })
   test('gibberish is unknown, not a guessed run', () =>
     expect(parseInstruction('what is the weather', roster).kind).toBe('unknown'))
