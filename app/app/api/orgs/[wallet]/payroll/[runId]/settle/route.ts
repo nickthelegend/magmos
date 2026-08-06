@@ -1,11 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAddress, type Address } from 'viem'
+import { isAddress, keccak256, toHex, type Address } from 'viem'
 import { requireOwner } from '@/lib/auth'
 import { poolIdFor, USDC } from '@/lib/magmos'
 import { sealProvider } from '@/lib/seal'
 import {
-  sealRefFor,
-  settleSealedOnChain,
+  settleAllSealedOnChain,
   signerAccount,
   signerCanSettle,
 } from '@/lib/payroll-signer'
@@ -117,39 +116,77 @@ export async function POST(req: NextRequest, { params }: Params) {
   const provider = sealProvider()
   const deliveryLive = provider.live
 
-  const lines = await listPayments(org, runId)
+  const lines = (await listPayments(org, runId)).filter((l) => l.status !== 'sealed')
   const settled: unknown[] = []
   const failed: unknown[] = []
 
-  // Sequential, not parallel: Arc's RPC rejects concurrent requests outright (`-32011`), and a
-  // half-broadcast batch is much harder to reconcile than a run that stops on the first failure.
-  for (const line of lines) {
-    if (line.status === 'sealed') continue
-    const employee = line.employee as Address
+  // ---- leg 1: ONE confidential settlement for the whole run -------------------------------
+  //
+  // Deliberately not a loop. Settling per employee would put each recipient and each salary into
+  // calldata, which is public — that was measured on a real transaction, not assumed. `settleAllSealed`
+  // takes only (poolId, sealRef), so there is nothing to attribute. The run-level sealRef commits to
+  // the run without naming it: the employer can reproduce it from their own records, nobody else can
+  // invert it.
+  const runSealRef = keccak256(toHex(`magmos:run:${org}:${runId}`))
 
+  let settleTxHash: string
+  let settledTotalMicros: bigint
+  let settledCount: number
+  try {
+    const r = await settleAllSealedOnChain(poolId, runSealRef)
+    settleTxHash = r.txHash
+    settledTotalMicros = r.totalMicros
+    settledCount = r.count
+  } catch (e) {
+    // Nothing was delivered, so put the run back where it can be retried rather than stranding it
+    // in `settling` forever.
+    const message = (e as Error).message.slice(0, 200)
+    await advanceRun(org, runId, 'failed')
+    await appendAudit({
+      orgWallet: org,
+      at: new Date().toISOString(),
+      event: 'run.failed',
+      actor,
+      runId,
+      detail: `On-chain settlement failed, nothing delivered: ${message}`,
+    })
+    return NextResponse.json({ error: 'Settlement failed on-chain', detail: message }, { status: 502 })
+  }
+
+  await appendAudit({
+    orgWallet: org,
+    at: new Date().toISOString(),
+    event: 'run.settled',
+    actor,
+    runId,
+    amountMicros: settledTotalMicros,
+    detail: `Settled ${settledCount} stream(s) in one confidential transaction — no recipient or per-person amount is on-chain.`,
+    refs: { settleTxHash, sealRef: runSealRef },
+  })
+
+  // ---- leg 2: confidential delivery, per recipient ----------------------------------------
+  //
+  // Sequential because Arc's RPC rejects concurrent requests outright (-32011). A failure here does
+  // NOT undo the settlement: the pay is in the org treasury and the line is marked failed so it can
+  // be redelivered, which is recoverable. Silently reporting it as delivered would not be.
+  for (const line of lines) {
+    const employee = line.employee as Address
     try {
       await updatePayment(org, runId, employee, { status: 'settling' })
 
-      // Delivery first when it is live, so the on-chain commitment references a delivery that
-      // actually exists rather than one we intend to make.
-      let sealId = `pending:${runId}:${employee}`
       let deliveryRef: string | undefined
       let deliveryTxHash: string | undefined
       if (deliveryLive) {
         if (!line.sealedTo) throw new Error('Recipient has no sealed payout address enrolled')
-        const d = await provider.seal(line.sealedTo, line.amountMicros, `magmos:${runId}`)
-        sealId = d.ref
+        const d = await provider.seal(line.sealedTo, line.amountMicros)
         deliveryRef = d.ref
         deliveryTxHash = d.txHash
       }
 
-      const sealRef = sealRefFor(runId, employee, sealId)
-      const res = await settleSealedOnChain(poolId, employee, line.amountMicros, sealRef)
-
       await updatePayment(org, runId, employee, {
         status: 'sealed',
-        sealRef,
-        settleTxHash: res.txHash,
+        sealRef: runSealRef,
+        settleTxHash: settleTxHash as `0x${string}`,
         sealTxHash: deliveryTxHash as `0x${string}` | undefined,
       })
       await appendAudit({
@@ -161,11 +198,11 @@ export async function POST(req: NextRequest, { params }: Params) {
         employee,
         amountMicros: line.amountMicros,
         detail: deliveryLive
-          ? 'Settled on Arc and delivered confidentially.'
-          : 'Settled on Arc. Confidential delivery leg not run — Unlink credentials absent.',
+          ? 'Delivered confidentially from the sealed treasury.'
+          : 'Settled on Arc. Confidential delivery not run — Unlink credentials absent.',
         refs: {
-          settleTxHash: res.txHash,
-          sealRef,
+          settleTxHash,
+          sealRef: runSealRef,
           ...(deliveryRef ? { deliveryRef } : {}),
           ...(deliveryTxHash ? { sealTxHash: deliveryTxHash } : {}),
         },
@@ -175,10 +212,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         employee,
         name: line.name,
         amountUsdc: Number(line.amountMicros) / 1e6,
-        txHash: res.txHash,
-        sealRef,
-        // Expected to be non-zero: streams keep accruing in the seconds after the seal lands.
-        remainingClaimableUsdc: Number(res.remainingClaimable) / 1e6,
+        txHash: settleTxHash,
+        sealRef: runSealRef,
         delivered: deliveryLive,
       })
     } catch (e) {
@@ -198,20 +233,27 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
   }
 
-  const finalStatus = failed.length === 0 ? 'settled' : 'failed'
+  // The money already moved on-chain, so the run is `settled` even if a delivery failed — marking it
+  // `failed` would invite a retry that double-settles. Failed lines are listed for redelivery.
+  const finalStatus = 'settled'
   await advanceRun(org, runId, finalStatus)
-  await appendAudit({
-    orgWallet: org,
-    at: new Date().toISOString(),
-    event: finalStatus === 'settled' ? 'run.settled' : 'run.failed',
-    actor,
-    runId,
-    detail: `${settled.length} settled, ${failed.length} failed`,
-  })
+  if (failed.length) {
+    await appendAudit({
+      orgWallet: org,
+      at: new Date().toISOString(),
+      event: 'run.failed',
+      actor,
+      runId,
+      detail: `Settled on-chain, but ${failed.length} delivery/deliveries failed and need redelivery.`,
+    })
+  }
 
   return NextResponse.json({
     runId,
     status: finalStatus,
+    settleTxHash,
+    settledTotalUsdc: Number(settledTotalMicros) / 1e6,
+    settledStreamCount: settledCount,
     settled,
     failed,
     // Stated on every response so a caller can never mistake a settled-only run for a delivered one.

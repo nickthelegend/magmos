@@ -40,6 +40,8 @@ const SEALED = [
   // settleAllSealed — the confidential path. Calldata is (poolId, sealRef); no recipient exists to
   // read, in the input or the logs.
   '0xec88d135b90b29f2ff03990bdc5e7b8656a85b8be6074c33df82a83c92e31817',
+  // Produced by the DASHBOARD's own settle API, not a script — this is the path a judge exercises.
+  '0x6cae5dfbb5bae6af7ae36323bec0a21fe2e67e535420da09d2dd21dcd7dc9ea9',
 ]
 
 /**
