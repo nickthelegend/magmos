@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {Vm} from "forge-std/Vm.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {MagmosRegistry} from "../src/MagmosRegistry.sol";
 import {MagmosPayroll} from "../src/MagmosPayroll.sol";
@@ -318,5 +319,114 @@ contract MagmosSealTest is Test {
             earned,
             "sealed + claimed == earned, exactly"
         );
+    }
+
+    // ---- settleAllSealed: the confidential path ---------------------------
+
+    function _twoPersonPool() internal returns (bytes32 poolId) {
+        address[] memory e = new address[](2);
+        uint256[] memory r = new uint256[](2);
+        uint256[] memory p = new uint256[](2);
+        e[0] = alice; e[1] = bob;
+        r[0] = RATE;  r[1] = RATE * 2;
+        p[0] = PERIOD; p[1] = PERIOD;
+        vm.prank(org);
+        poolId = payroll.createPoolAndDeposit(address(usdc), 100_000e6, e, r, p);
+        vm.prank(org);
+        payroll.grantPoolRole(poolId, sealer, sealerRole);
+    }
+
+    function test_SealAll_SettlesEveryStreamAndPaysOrg() public {
+        bytes32 poolId = _twoPersonPool();
+        vm.warp(block.timestamp + DAY);
+
+        uint256 orgBefore = usdc.balanceOf(org);
+        vm.prank(sealer);
+        (uint256 total, uint256 count) = payroll.settleAllSealed(poolId, SEAL_REF);
+
+        // alice earns 100/day, bob 200/day.
+        assertEq(count, 2, "both streams settled");
+        assertEq(total, PER_DAY * 3, "total is the sum of both accruals");
+        assertEq(usdc.balanceOf(org), orgBefore + total, "org received exactly the total");
+        assertEq(payroll.claimableAmount(poolId, alice), 0, "alice fully crystallised");
+        assertEq(payroll.claimableAmount(poolId, bob), 0, "bob fully crystallised");
+    }
+
+    /// The whole point: the event carries no recipient and no per-person figure.
+    function test_SealAll_EmitsNoRecipientAndNoPerPersonAmount() public {
+        bytes32 poolId = _twoPersonPool();
+        vm.warp(block.timestamp + DAY);
+
+        vm.recordLogs();
+        vm.prank(sealer);
+        payroll.settleAllSealed(poolId, SEAL_REF);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 sig = keccak256("PayrollSealed(bytes32,bytes32,uint256,uint256,uint256)");
+        bool found;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            for (uint256 t = 0; t < logs[i].topics.length; ++t) {
+                // No employee address may appear in ANY indexed slot of ANY log.
+                assertTrue(
+                    logs[i].topics[t] != bytes32(uint256(uint160(alice))),
+                    "alice leaked in a topic"
+                );
+                assertTrue(
+                    logs[i].topics[t] != bytes32(uint256(uint160(bob))),
+                    "bob leaked in a topic"
+                );
+            }
+            if (logs[i].topics[0] == sig) {
+                found = true;
+                (uint256 total, uint256 count,) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256));
+                assertEq(total, PER_DAY * 3, "aggregate is public, deliberately");
+                assertEq(count, 2, "headcount is public, deliberately");
+            }
+        }
+        assertTrue(found, "PayrollSealed emitted");
+    }
+
+    function test_SealAll_RequiresSealerRole() public {
+        bytes32 poolId = _twoPersonPool();
+        vm.warp(block.timestamp + DAY);
+        vm.prank(attacker);
+        vm.expectRevert(MagmosPayroll.NotAuthorized.selector);
+        payroll.settleAllSealed(poolId, SEAL_REF);
+    }
+
+    function test_SealAll_RevertsWhenNothingAccrued() public {
+        bytes32 poolId = _twoPersonPool();
+        // No time has passed, so there is nothing to settle. Better to revert than to emit an empty
+        // settlement that looks like a payroll run in the audit trail.
+        vm.prank(sealer);
+        vm.expectRevert(MagmosPayroll.ZeroClaimable.selector);
+        payroll.settleAllSealed(poolId, SEAL_REF);
+    }
+
+    function test_SealAll_CannotDoubleSettle() public {
+        bytes32 poolId = _twoPersonPool();
+        vm.warp(block.timestamp + DAY);
+        vm.prank(sealer);
+        payroll.settleAllSealed(poolId, SEAL_REF);
+        // Immediately again: everything was crystallised, so there is nothing left.
+        vm.prank(sealer);
+        vm.expectRevert(MagmosPayroll.ZeroClaimable.selector);
+        payroll.settleAllSealed(poolId, SEAL_REF);
+    }
+
+    function test_SealAll_AgreesWithClaimAccounting() public {
+        bytes32 poolId = _twoPersonPool();
+        vm.warp(block.timestamp + DAY);
+        vm.prank(sealer);
+        (uint256 total,) = payroll.settleAllSealed(poolId, SEAL_REF);
+
+        // A sealed run and a claim must never disagree about what was earned: after settling,
+        // an employee claiming immediately gets only what re-accrued, not a second copy.
+        vm.warp(block.timestamp + DAY);
+        vm.prank(alice);
+        payroll.claim(poolId);
+        assertEq(usdc.balanceOf(alice), PER_DAY, "alice got exactly one further day");
+        assertEq(total, PER_DAY * 3, "the sealed total was the first day only");
     }
 }

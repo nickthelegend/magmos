@@ -19,7 +19,7 @@ export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
 
 // ----- Deployed Magmos core (Arc testnet) -----
 export const MAGMOS_PAYROLL = (process.env.NEXT_PUBLIC_MAGMOS_PAYROLL ||
-  '0xA837eB367585399b972cDa816dB9DB3D74281287') as `0x${string}`
+  '0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B') as `0x${string}`
 // Earned Wage Access module — draw wages already streamed-and-earned, before the claim.
 export const MAGMOS_ADVANCE = (process.env.NEXT_PUBLIC_MAGMOS_ADVANCE ||
   '0x532791bC95152424739950a90AC986FF196097FC') as `0x${string}`

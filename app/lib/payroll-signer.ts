@@ -20,6 +20,7 @@ import {
   createWalletClient,
   defineChain,
   http,
+  decodeEventLog,
   keccak256,
   toHex,
   type Address,
@@ -99,6 +100,49 @@ export async function signerCanSettle(poolId: Hex): Promise<{ ok: boolean; reaso
  */
 export function sealRefFor(runId: string, employee: string, sealId: string): Hex {
   return keccak256(toHex(`magmos:seal:${runId}:${employee.toLowerCase()}:${sealId}`))
+}
+
+/**
+ * Settle the whole pool in one confidential transaction.
+ *
+ * This is the payroll path. `settleSealedOnChain` below names a recipient and an amount in calldata,
+ * which is public — verified by decoding a real transaction — so it must never carry a payroll run.
+ * Here the calldata is `(poolId, sealRef)` and there is nothing to attribute.
+ */
+export async function settleAllSealedOnChain(
+  poolId: Hex,
+  sealRef: Hex
+): Promise<{ txHash: Hex; totalMicros: bigint; count: number }> {
+  const acct = signerAccount()
+  if (!acct) throw new Error('PAYROLL_SIGNER_KEY is not configured')
+
+  const wallet = createWalletClient({ account: acct, chain: arc, transport: http(ARC_RPC_URL) })
+  const txHash = await wallet.writeContract({
+    address: MAGMOS_PAYROLL,
+    abi: PAYROLL_ABI,
+    functionName: 'settleAllSealed',
+    args: [poolId, sealRef],
+  })
+  const rc = await settlementPublicClient.waitForTransactionReceipt({ hash: txHash })
+  if (rc.status !== 'success') throw new Error(`settleAllSealed reverted (${txHash})`)
+
+  // The totals come back from the PayrollSealed event rather than being assumed from the draft, so
+  // what is recorded is what the chain actually did.
+  let totalMicros = 0n
+  let count = 0
+  for (const log of rc.logs) {
+    try {
+      const d = decodeEventLog({ abi: PAYROLL_ABI, data: log.data, topics: log.topics })
+      if (d.eventName === 'PayrollSealed') {
+        const a = d.args as unknown as { total: bigint; count: bigint }
+        totalMicros = a.total
+        count = Number(a.count)
+      }
+    } catch {
+      /* not ours */
+    }
+  }
+  return { txHash, totalMicros, count }
 }
 
 export type SettleResult = {

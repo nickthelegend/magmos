@@ -37,9 +37,18 @@ const ERC20_TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 
 // Real settlements produced by the dashboard's own API. Not fixtures.
 const SEALED = [
+  // settleAllSealed — the confidential path. Calldata is (poolId, sealRef); no recipient exists to
+  // read, in the input or the logs.
+  '0xec88d135b90b29f2ff03990bdc5e7b8656a85b8be6074c33df82a83c92e31817',
+]
+
+/**
+ * The per-employee path, kept under test precisely BECAUSE it leaks. Its calldata carries the
+ * employee and the amount, so it must never be used for a payroll run — and a regression that
+ * quietly routed runs back through it would show up here as a failure rather than as silence.
+ */
+const LEAKY = [
   '0xa65413c929bbbcdee006f9ed6556e2356ba03147883c16006dcf3586981c0721',
-  '0xad6e981e677681660b03b34c90af1bbf7044c09baef7da503e640e075075dbf9',
-  '0x9fee55aadcc748e7aff982682513ec7c60de2008bfab92c8d767e90eff7996f5',
 ]
 
 const empSet = new Set(employees.map((e) => e.address.toLowerCase()))
@@ -54,6 +63,12 @@ async function analyse(hash) {
   const leakedRecipients = new Set()
   const leakedAmounts = []
   let sealRefs = 0
+
+  // Calldata first. An event can be redacted; calldata cannot, and checking only logs is exactly
+  // the mistake that made an earlier version of this script report a false pass.
+  const tx = await pub.getTransaction({ hash })
+  const hex = tx.input.toLowerCase()
+  for (const a of empSet) if (hex.includes(a.slice(2))) leakedRecipients.add(a)
 
   for (const log of rc.logs) {
     if (log.topics[0] === ERC20_TRANSFER) {
@@ -109,6 +124,15 @@ for (const h of SEALED) {
     // pay was for. Worth showing rather than hiding.
     console.log(`      (${leakedAmounts.map((v) => (Number(v) / 1e6).toFixed(6)).join(', ')} — treasury-side movement, not attributable to a recipient)`)
   }
+}
+
+console.log('\n── Control: the per-employee path, which is known to leak ─────')
+for (const h of LEAKY) {
+  const { leakedRecipients, leakedAmounts } = await analyse(h)
+  console.log(`\n  ${h}`)
+  console.log(`    employee addresses exposed           : ${leakedRecipients.length ? leakedRecipients.join(', ') : 'NONE'}`)
+  console.log(`    amounts readable in the clear        : ${leakedAmounts.length}`)
+  console.log(`    → this is why settleSealed must not be used for payroll runs`)
 }
 
 console.log('\n── What an ordinary ERC-20 payroll would have leaked ──────────')

@@ -108,12 +108,31 @@ contract MagmosPayroll is ReentrancyGuard {
     /// @notice Accrued pay was settled for confidential delivery. Note what is NOT here: the
     ///         recipient's payout address and the delivered amount off-ledger. `sealRef` is an
     ///         opaque commitment to the shielded transfer, reconcilable only by the employer.
+    /**
+     * @notice A single stream was settled for confidential delivery.
+     * @dev NOT confidential, and named accordingly in the docs. `employee` is indexed and `amount`
+     * is in the clear, and even without them `settleSealed`'s calldata carries both. Retained for
+     * one-off corrections and for the advance flow; use `settleAllSealed` for payroll runs.
+     */
     event PaySealed(
         bytes32 indexed poolId,
         address indexed employee,
         uint256 amount,
         bytes32 indexed sealRef,
         uint256 remainingClaimable,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice A whole payroll run was settled. Carries no recipient and no per-person amount.
+     * @dev The confidential path. `total` and `count` are public on purpose: aggregate spend is the
+     * auditable part, an individual's salary is the secret.
+     */
+    event PayrollSealed(
+        bytes32 indexed poolId,
+        bytes32 indexed sealRef,
+        uint256 total,
+        uint256 count,
         uint256 timestamp
     );
     /// @notice A portion of accrued pay was settled early (earned-wage advance) to `to`.
@@ -375,6 +394,76 @@ contract MagmosPayroll is ReentrancyGuard {
         emit PaySealed(poolId, employee, amount, sealRef, remainingClaimable, block.timestamp);
 
         IERC20(pool.token).safeTransfer(pool.org, amount);
+    }
+
+    /**
+     * @notice Settle every stream in the pool at once, naming nobody.
+     * @dev This exists because `settleSealed` cannot be confidential, no matter what it emits.
+     *
+     * Its arguments — `employee` and `amount` — sit in transaction CALLDATA, which is public on a
+     * transparent chain. Redacting the event would only hide the leak from anyone who did not think
+     * to decode the input. So the fix is not to emit less; it is to *ask for less*.
+     *
+     * Here the calldata is `(poolId, sealRef)`. There is no recipient and no per-person figure to
+     * read, in the input or the logs. An observer learns that an org ran payroll and what it cost in
+     * total — which is exactly the part that should stay auditable — and learns nothing about who
+     * received what. The per-recipient split lives only in the employer's own records and in the
+     * shielded delivery that follows.
+     *
+     * The total is deliberately still public. Hiding it would break the property that makes
+     * streaming payroll worth auditing at all, and an employer's aggregate spend is not the secret
+     * — an individual's salary is.
+     *
+     * Gas is linear in the roster, so a very large pool may need to be split across calls. Splitting
+     * weakens the guarantee (two settlements of known size narrow the search), which is why this
+     * settles everything by default rather than exposing a range.
+     *
+     * @param poolId  Pool to settle.
+     * @param sealRef Commitment to the off-chain delivery. Opaque; the employer can reproduce it.
+     * @return total  Sum settled to the org treasury.
+     * @return count  How many streams contributed.
+     */
+    function settleAllSealed(bytes32 poolId, bytes32 sealRef)
+        external
+        nonReentrant
+        returns (uint256 total, uint256 count)
+    {
+        Pool storage pool = _pools[poolId];
+        if (!pool.exists) revert PoolNotFound();
+        if (!_hasPoolRole(poolId, pool, msg.sender, SEALER_ROLE)) revert NotAuthorized();
+
+        address[] storage list = _employeeList[poolId];
+        uint256 n = list.length;
+
+        for (uint256 i = 0; i < n; ++i) {
+            Stream storage s = _streams[poolId][list[i]];
+            if (!s.exists) continue;
+
+            uint64 effEnd = _effectiveEnd(s);
+            uint256 available = s.pendingBalance + _accrued(s, effEnd);
+            if (available == 0) continue;
+
+            // Same crystallize-and-debit as settleSealed, so a sealed settlement and a claim can
+            // never disagree about what has been earned or what is left.
+            s.claimedAt = effEnd;
+            s.totalPausedSecs = 0;
+            s.pendingBalance = 0;
+
+            total += available;
+            unchecked {
+                ++count;
+            }
+        }
+
+        if (total == 0) revert ZeroClaimable();
+        if (pool.balance < total) revert InsufficientPoolBalance();
+
+        pool.totalClaimed += total;
+        pool.balance -= total;
+
+        emit PayrollSealed(poolId, sealRef, total, count, block.timestamp);
+
+        IERC20(pool.token).safeTransfer(pool.org, total);
     }
 
     // ------------------------------------------------------------------ stream control
