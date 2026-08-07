@@ -195,7 +195,14 @@ bind every recipient into a single correlatable cohort. Employees find their own
 announcements with their viewing key, then claim whenever they like, to wherever they like. The
 stealth address never needs gas: it only signs, and anyone can relay.
 
-Run the whole thing yourself:
+Verify everything in one command — contracts, types, tests, live deployments, address drift, the
+privacy property, and a sweep for mocks:
+
+```bash
+cd app && node scripts/verify-all.mjs
+```
+
+Or run the whole confidential pipeline against Arc:
 
 ```bash
 cd app && node scripts/stealth-run.mjs
