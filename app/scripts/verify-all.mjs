@@ -116,6 +116,18 @@ await step('The payout contract actually holds unclaimed salary', async () => {
   ok(`${(Number(bal) / 1e6).toFixed(6)} USDC escrowed for unclaimed stealth payments`)
 })
 
+await step('SDK stealth crypto matches the app', async () => {
+  // The SDK ships its own copy so integrators get the rail without depending on our app. Two
+  // implementations of an ECDH derivation that must agree exactly is how funds end up at an address
+  // nobody can spend from — so they are compared body-for-body, ignoring only the header comment.
+  const strip = (f) =>
+    readFileSync(f, 'utf8').replace(/^\/\*\*[\s\S]*?\*\/\n/, '').trim()
+  const a = strip(`${ROOT}app/lib/stealth.ts`)
+  const b = strip(`${ROOT}sdk/src/stealth.ts`)
+  if (a === b) ok('app/lib/stealth.ts and sdk/src/stealth.ts are identical below the header')
+  else bad('SDK stealth crypto has DRIFTED from the app — they must derive identical addresses')
+})
+
 await step('No mocks left in shipped code', async () => {
   const out = run(
     `grep -rniE "\\\\b(mock|fake|dummy|fixme)\\\\b" --include="*.ts" --include="*.tsx" --include="*.sol" --include="*.mjs" ` +

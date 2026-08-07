@@ -1,7 +1,7 @@
 {
   "name": "@magmos/sdk",
   "version": "0.1.0",
-  "description": "Drop-in crypto checkout for React — accept USDC payments on Circle's Arc network with a single component.",
+  "description": "Drop-in crypto checkout for React \u2014 accept USDC payments on Circle's Arc network with a single component.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -14,14 +14,26 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["arc", "circle", "usdc", "payments", "checkout", "react", "web3", "magmos"],
+  "keywords": [
+    "arc",
+    "circle",
+    "usdc",
+    "payments",
+    "checkout",
+    "react",
+    "web3",
+    "magmos"
+  ],
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18"
@@ -30,7 +42,8 @@
     "@tanstack/react-query": "^5.101.0",
     "@wagmi/core": "^2.13.0",
     "viem": "^2.21.0",
-    "wagmi": "^2.12.0"
+    "wagmi": "^2.12.0",
+    "@noble/curves": "^2.0.0"
   },
   "devDependencies": {
     "@types/react": "^19",

@@ -18,3 +18,25 @@ export {
   type AdvanceQuote,
   type AdvanceAccount,
 } from "./advance";
+
+// ---- confidential payouts (stealth addresses) ----
+// Pure crypto: derive a meta-address, create one-time payment addresses, and let a recipient
+// reconstruct their own claim from chain logs. No backend involved.
+export {
+  deriveStealthKeys,
+  stealthDerivationMessage,
+  createStealthPayment,
+  checkAnnouncement,
+  reconstructClaim,
+  encryptAmount,
+  decryptAmount,
+  isSealedAddress,
+  payoutLeaf,
+  buildMerkleTree,
+  merkleProof,
+  verifyProof,
+  claimTypedData,
+  type StealthKeys,
+  type StealthMetaAddress,
+  type StealthPayment,
+} from "./stealth";
