@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isAddress, keccak256, toHex, type Address } from 'viem'
 import { requireOwner } from '@/lib/auth'
+import { ensureIndexes } from '@/lib/mongo-indexes'
+import { LIMITS, rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { getDb, COLLECTIONS } from '@/lib/mongo'
 import { poolIdFor, USDC } from '@/lib/magmos'
 import { deliverBatch, isValidMeta } from '@/lib/payroll-delivery'
@@ -46,6 +48,16 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const auth = await requireOwner(req, wallet)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+
+  // The tightest budget in the app — this one moves money.
+  const rl = rateLimit(`settle:${auth.address}`, LIMITS.settle.limit, LIMITS.settle.windowMs)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Too many settlement attempts. Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: rateLimitHeaders(rl) }
+    )
+  }
+  await ensureIndexes()
 
   const org = wallet.toLowerCase()
   const actor = auth.address!

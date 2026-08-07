@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isAddress, type Address } from 'viem'
 import { requireOwner } from '@/lib/auth'
+import { ensureIndexes } from '@/lib/mongo-indexes'
+import { LIMITS, rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { getDb, COLLECTIONS } from '@/lib/mongo'
 import { poolIdFor, USDC } from '@/lib/magmos'
 import { getEmployeeSnapshots, getEmployees } from '@/lib/reads'
@@ -34,6 +36,17 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const auth = await requireOwner(req, wallet)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+
+  // Keyed on the authenticated wallet, not the IP: the signature is the identity, and an IP is
+  // shared by everyone behind one office NAT.
+  const rl = rateLimit(`draft:${auth.address}`, LIMITS.draft.limit, LIMITS.draft.windowMs)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Too many drafts. Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: rateLimitHeaders(rl) }
+    )
+  }
+  await ensureIndexes()
 
   let body: { instruction?: string }
   try {

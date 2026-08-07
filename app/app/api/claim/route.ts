@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { verifyAuth } from '@/lib/auth'
 import { getDb, COLLECTIONS } from '@/lib/mongo'
 import { isValidMeta } from '@/lib/payroll-delivery'
+import { ensureIndexes } from '@/lib/mongo-indexes'
+import { LIMITS, rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +23,12 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+
+  const rl = rateLimit(`claim-read:${auth.address}`, LIMITS.read.limit, LIMITS.read.windowMs)
+  if (!rl.ok) {
+    return NextResponse.json({ error: 'Slow down.' }, { status: 429, headers: rateLimitHeaders(rl) })
+  }
+  await ensureIndexes()
 
   const db = await getDb()
   const employee = auth.address!
@@ -78,6 +86,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+
+  const rl = rateLimit(`register:${auth.address}`, LIMITS.register.limit, LIMITS.register.windowMs)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Too many key updates. Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: rateLimitHeaders(rl) }
+    )
+  }
 
   let body: { spendingPubKey?: string; viewingPubKey?: string }
   try {

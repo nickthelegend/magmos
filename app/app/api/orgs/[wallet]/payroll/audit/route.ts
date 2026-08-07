@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isAddress } from 'viem'
 import { requireOwner } from '@/lib/auth'
 import { auditToCsv, listAudit } from '@/lib/payroll-store'
+import { ensureIndexes } from '@/lib/mongo-indexes'
+import { LIMITS, rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -23,6 +25,12 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const auth = await requireOwner(req, wallet)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+
+  const rl = rateLimit(`audit:${auth.address}`, LIMITS.read.limit, LIMITS.read.windowMs)
+  if (!rl.ok) {
+    return NextResponse.json({ error: 'Slow down.' }, { status: 429, headers: rateLimitHeaders(rl) })
+  }
+  await ensureIndexes()
 
   const rows = await listAudit(wallet.toLowerCase(), 500)
 
