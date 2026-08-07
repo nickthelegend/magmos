@@ -8,6 +8,7 @@ import registryAbi from './abi/MagmosRegistry.json'
 import vaultAbi from './abi/MagmosVault.json'
 import yieldVaultAbi from './abi/MagmosYieldVault.json'
 import advanceAbi from './abi/MagmosAdvance.json'
+import stealthPayoutAbi from './abi/MagmosStealthPayout.json'
 import equityVaultAbi from './abi/MagmosEquityVault.json'
 import pythRelayAbi from './abi/PythPriceRelay.json'
 
@@ -37,6 +38,10 @@ export const MAGMOS_YIELD_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_YIELD ||
 // Programmable equity: RSU shares vest on-chain and settle in USDC at a live oracle price.
 export const MAGMOS_EQUITY_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_EQUITY_VAULT ||
   '0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7') as `0x${string}`
+/** Confidential delivery. Holds a payroll batch as a Merkle root; employees claim to stealth keys. */
+export const MAGMOS_STEALTH_PAYOUT = (process.env.NEXT_PUBLIC_MAGMOS_STEALTH_PAYOUT ||
+  '0x913e3841659f5a77222190E00E1A07279360494c') as `0x${string}`
+
 // Pyth-shaped on-chain price relay (fed the real AAPL/USD feed from Pyth Hermes). Swapping this
 // for canonical Pyth is an address change, not a code change — the vault reads IPyth either way.
 export const PYTH_PRICE_RELAY = (process.env.NEXT_PUBLIC_PYTH_PRICE_RELAY ||
@@ -54,6 +59,7 @@ export const REGISTRY_ABI = registryAbi as Abi
 export const VAULT_ABI = vaultAbi as Abi
 export const YIELD_VAULT_ABI = yieldVaultAbi as Abi
 export const ADVANCE_ABI = advanceAbi as Abi
+export const STEALTH_PAYOUT_ABI = stealthPayoutAbi as Abi
 export const EQUITY_VAULT_ABI = equityVaultAbi as Abi
 export const PYTH_RELAY_ABI = pythRelayAbi as Abi
 

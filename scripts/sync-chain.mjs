@@ -27,6 +27,7 @@ const CONTRACTS = [
   "MagmosYieldVault",
   "MagmosEquityVault",
   "PythPriceRelay",
+  "MagmosStealthPayout",
 ];
 
 // Which ABIs each app actually imports (keeps bundles honest).
@@ -51,6 +52,7 @@ const ADDRESS_MAP = {
   MAGMOS_REGISTRY: "MagmosRegistry",
   MAGMOS_VAULT: "MagmosVault",
   MAGMOS_YIELD_VAULT: "MagmosYieldVault",
+  MAGMOS_STEALTH_PAYOUT: "MagmosStealthPayout",
 };
 
 // The SDK publishes a default address, and the docs quote the contracts table. Both drifted after
@@ -75,6 +77,7 @@ const ENV_MAP = {
   NEXT_PUBLIC_MAGMOS_VAULT: "MagmosVault",
   NEXT_PUBLIC_MAGMOS_YIELD: "MagmosYieldVault",
   NEXT_PUBLIC_USDC: "USDC",
+  NEXT_PUBLIC_MAGMOS_STEALTH_PAYOUT: "MagmosStealthPayout",
 };
 
 if (!existsSync(DEPLOYMENTS)) {

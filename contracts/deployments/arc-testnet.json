@@ -26,5 +26,6 @@
   "note3": "superseded: previous Magmos deployments. sync-chain --check flags docs that still quote these. Earlier demo transactions against them remain valid on-chain.",
   "PythPriceRelay": "0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B",
   "MagmosEquityVault": "0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7",
-  "note4": "MagmosPayroll redeployed to ship settleSealed + SEALER_ROLE (confidential settlement of streamed pay). MagmosAdvance redeployed with it because setAdvanceModule is one-time-forever."
+  "note4": "MagmosPayroll redeployed to ship settleSealed + SEALER_ROLE (confidential settlement of streamed pay). MagmosAdvance redeployed with it because setAdvanceModule is one-time-forever.",
+  "MagmosStealthPayout": "0x913e3841659f5a77222190E00E1A07279360494c"
 }
