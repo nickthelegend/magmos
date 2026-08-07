@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "concepts/streaming-payroll",
+        "concepts/confidential-payroll",
         "concepts/pools-and-groups",
         "concepts/yield-layer",
         "concepts/claiming",

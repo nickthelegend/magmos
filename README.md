@@ -195,6 +195,8 @@ bind every recipient into a single correlatable cohort. Employees find their own
 announcements with their viewing key, then claim whenever they like, to wherever they like. The
 stealth address never needs gas: it only signs, and anyone can relay.
 
+Full itemised record of what is built and verified: [COMPLETED.md](COMPLETED.md).
+
 Verify everything in one command — contracts, types, tests, live deployments, address drift, the
 privacy property, and a sweep for mocks:
 
