@@ -24,7 +24,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .collection(COLLECTIONS.employees)
     .find({ orgWallet: wallet.toLowerCase() }, { projection: { _id: 0 } })
     .toArray()
-  return NextResponse.json(rows)
+  // Collapse the meta-address to a boolean. The keys are public, but the employer only needs to know
+  // whether this person can be paid confidentially — and shipping the raw points invites a client to
+  // start deriving stealth addresses, which is the server's job and must stay in one place.
+  return NextResponse.json(
+    rows.map(({ stealthMeta, ...rest }) => ({
+      ...rest,
+      privatePayoutReady: Boolean(stealthMeta?.spendingPubKey && stealthMeta?.viewingPubKey),
+    }))
+  )
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

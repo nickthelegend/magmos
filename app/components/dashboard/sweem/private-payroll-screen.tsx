@@ -105,6 +105,7 @@ export function PrivatePayrollScreen() {
   const [result, setResult] = useState<AgentResponse | null>(null);
   const [settling, setSettling] = useState(false);
   const [settleResult, setSettleResult] = useState<SettleResponse | null>(null);
+  const [reclaiming, setReclaiming] = useState<string | null>(null);
 
   const batchQuery = useQuery<{ batches: Batch[] }>({
     queryKey: ["payrollBatches", wallet],
@@ -170,6 +171,30 @@ export function PrivatePayrollScreen() {
       toast.error((e as Error).message);
     } finally {
       setSettling(false);
+    }
+  }
+
+  /** Recover pay nobody claimed, once the window has closed. The contract enforces both conditions. */
+  async function reclaim(b: Batch) {
+    if (!wallet) return;
+    setReclaiming(b.batchId);
+    try {
+      const r = await api.authedFetch(
+        `/api/orgs/${wallet}/payroll/batches/${b.batchId}/reclaim`,
+        "POST",
+        {}
+      );
+      if (r.status >= 400) {
+        toast.error(r.data?.error ?? "Reclaim failed", { description: r.data?.detail });
+        return;
+      }
+      toast.success(`Reclaimed ${r.data.reclaimedUsdc} USDC`, { description: r.data.txHash });
+      await batchQuery.refetch();
+      await auditQuery.refetch();
+    } catch (e) {
+      toast.error((e as Error).message.slice(0, 140));
+    } finally {
+      setReclaiming(null);
     }
   }
 
@@ -444,13 +469,23 @@ export function PrivatePayrollScreen() {
                       {b.readable ? b.unclaimedUsdc!.toFixed(6) : "—"}
                     </td>
                     <td className="py-2 text-right text-[12px] text-[var(--sw-text-muted)]">
-                      {!b.readable
-                        ? "older contract"
-                        : b.fullyClaimed
-                          ? "all claimed"
-                          : b.reclaimable
-                            ? "reclaimable"
-                            : `${b.expiresInDays}d left`}
+                      {!b.readable ? (
+                        "older contract"
+                      ) : b.fullyClaimed ? (
+                        "all claimed"
+                      ) : b.reclaimable ? (
+                        // Only offered once the window has actually closed. Before then the money is
+                        // still the employee's and the contract will refuse anyway.
+                        <button
+                          onClick={() => reclaim(b)}
+                          disabled={reclaiming !== null}
+                          className="rounded-full border border-[var(--sw-border-strong)] px-3 py-1 text-[12px] text-[var(--sw-text)] disabled:opacity-50"
+                        >
+                          {reclaiming === b.batchId ? "Reclaiming…" : "Reclaim unclaimed"}
+                        </button>
+                      ) : (
+                        `${b.expiresInDays}d left`
+                      )}
                     </td>
                   </tr>
                 ))}

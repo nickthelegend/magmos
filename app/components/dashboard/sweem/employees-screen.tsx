@@ -483,6 +483,17 @@ export function EmployeesScreen() {
                             {initials(e.name)}
                           </span>
                           <span className="font-medium text-[var(--sw-text)]">{e.name}</span>
+                          {/* Confidential payroll holds this person's line back rather than paying
+                              them in the clear, so the employer has to be able to see it before a
+                              run — not discover it in a failed line afterwards. */}
+                          {e.privatePayoutReady === false && (
+                            <span
+                              title="No private payout key. Confidential payroll will skip them until they set one up at /claim."
+                              className="rounded-full border border-[rgba(255,180,61,0.35)] bg-[rgba(255,180,61,0.1)] px-2 py-[2px] text-[10.5px] font-medium uppercase tracking-[0.05em] text-[var(--sw-lavender)]"
+                            >
+                              no payout key
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="sweem-mono text-xs">{shortAddr(e.walletAddress)}</td>

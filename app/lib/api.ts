@@ -37,6 +37,11 @@ export interface Employee {
   email?: string | null
   monthlyUsdc: number
   group?: string | null
+  /**
+   * Whether this person has published a stealth meta-address. False means confidential payroll will
+   * hold their line back rather than pay them in the clear, so the employer needs to see it.
+   */
+  privatePayoutReady?: boolean
 }
 
 export interface Pool {
