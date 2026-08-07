@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isAddress, keccak256, toHex, type Address } from 'viem'
 import { requireOwner } from '@/lib/auth'
+import { getDb, COLLECTIONS } from '@/lib/mongo'
 import { poolIdFor, USDC } from '@/lib/magmos'
-import { sealProvider } from '@/lib/seal'
+import { deliverBatch, isValidMeta } from '@/lib/payroll-delivery'
 import {
   settleAllSealedOnChain,
   signerAccount,
@@ -113,9 +114,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     detail: `Settling via delegated signer ${signerAccount()?.address}`,
   })
 
-  const provider = sealProvider()
-  const deliveryLive = provider.live
-
   const lines = (await listPayments(org, runId)).filter((l) => l.status !== 'sealed')
   const settled: unknown[] = []
   const failed: unknown[] = []
@@ -164,72 +162,97 @@ export async function POST(req: NextRequest, { params }: Params) {
     refs: { settleTxHash, sealRef: runSealRef },
   })
 
-  // ---- leg 2: confidential delivery, per recipient ----------------------------------------
+  // ---- leg 2: ONE confidential delivery batch --------------------------------------------
   //
-  // Sequential because Arc's RPC rejects concurrent requests outright (-32011). A failure here does
-  // NOT undo the settlement: the pay is in the org treasury and the line is marked failed so it can
-  // be redelivered, which is recoverable. Silently reporting it as delivered would not be.
+  // Stealth addresses (ERC-5564): each line gets a one-time address only that employee can derive.
+  // Committed as a Merkle root and funded in a single transaction, so there is no per-recipient
+  // transfer to correlate and no cohort bound together by a shared block.
+  //
+  // Employees without a registered meta-address are held back rather than paid in the clear. Falling
+  // back to a plain transfer would silently undo the privacy for exactly the people who had not set
+  // themselves up — the worst possible default.
+  const db = await getDb()
+  const deliverable = []
   for (const line of lines) {
-    const employee = line.employee as Address
-    try {
-      await updatePayment(org, runId, employee, { status: 'settling' })
-
-      let deliveryRef: string | undefined
-      let deliveryTxHash: string | undefined
-      if (deliveryLive) {
-        if (!line.sealedTo) throw new Error('Recipient has no sealed payout address enrolled')
-        const d = await provider.seal(line.sealedTo, line.amountMicros)
-        deliveryRef = d.ref
-        deliveryTxHash = d.txHash
-      }
-
-      await updatePayment(org, runId, employee, {
-        status: 'sealed',
-        sealRef: runSealRef,
-        settleTxHash: settleTxHash as `0x${string}`,
-        sealTxHash: deliveryTxHash as `0x${string}` | undefined,
-      })
-      await appendAudit({
-        orgWallet: org,
-        at: new Date().toISOString(),
-        event: 'payment.sealed',
-        actor,
-        runId,
-        employee,
-        amountMicros: line.amountMicros,
-        detail: deliveryLive
-          ? 'Delivered confidentially from the sealed treasury.'
-          : 'Settled on Arc. Confidential delivery not run — Unlink credentials absent.',
-        refs: {
-          settleTxHash,
-          sealRef: runSealRef,
-          ...(deliveryRef ? { deliveryRef } : {}),
-          ...(deliveryTxHash ? { sealTxHash: deliveryTxHash } : {}),
-        },
-      })
-
-      settled.push({
-        employee,
+    const emp = await db
+      .collection(COLLECTIONS.employees)
+      .findOne({ orgWallet: org, walletAddress: { $regex: `^${line.employee}$`, $options: 'i' } })
+    if (isValidMeta(emp?.stealthMeta)) {
+      deliverable.push({
+        employee: line.employee,
         name: line.name,
-        amountUsdc: Number(line.amountMicros) / 1e6,
-        txHash: settleTxHash,
-        sealRef: runSealRef,
-        delivered: deliveryLive,
+        amountMicros: line.amountMicros,
+        meta: emp!.stealthMeta,
       })
-    } catch (e) {
-      const message = (e as Error).message.slice(0, 200)
-      await updatePayment(org, runId, employee, { status: 'failed', error: message })
+    } else {
+      const message = 'No private payout key registered — ask them to visit /claim and set one up.'
+      await updatePayment(org, runId, line.employee as Address, { status: 'failed', error: message })
       await appendAudit({
         orgWallet: org,
         at: new Date().toISOString(),
         event: 'payment.failed',
         actor,
         runId,
-        employee,
+        employee: line.employee,
         amountMicros: line.amountMicros,
         detail: message,
       })
-      failed.push({ employee, name: line.name, error: message })
+      failed.push({ employee: line.employee, name: line.name, error: message })
+    }
+  }
+
+  let delivery = null
+  if (deliverable.length) {
+    try {
+      delivery = await deliverBatch(org, runId, deliverable)
+      for (const d of delivery.lines) {
+        await updatePayment(org, runId, d.employee as Address, {
+          status: 'sealed',
+          sealRef: runSealRef,
+          settleTxHash: settleTxHash as `0x${string}`,
+          sealTxHash: delivery.fundTxHash,
+          stealthAddress: d.stealthAddress,
+          claimProof: d.proof,
+          batchId: delivery.batchId,
+          ephemeralPubKey: d.ephemeralPubKey,
+          viewTag: d.viewTag,
+        })
+        await appendAudit({
+          orgWallet: org,
+          at: new Date().toISOString(),
+          event: 'payment.sealed',
+          actor,
+          runId,
+          employee: d.employee,
+          amountMicros: d.amountMicros,
+          detail: 'Delivered to a one-time stealth address. Nothing on-chain links it to them.',
+          refs: { settleTxHash, fundTxHash: delivery.fundTxHash, batchId: delivery.batchId },
+        })
+        settled.push({
+          employee: d.employee,
+          name: d.name,
+          amountUsdc: Number(d.amountMicros) / 1e6,
+          txHash: delivery.fundTxHash,
+          sealRef: runSealRef,
+          delivered: true,
+        })
+      }
+    } catch (e) {
+      // Settlement already happened, so the pay is safe in the treasury. Mark the lines for
+      // redelivery rather than pretending the run failed entirely.
+      const message = (e as Error).message.slice(0, 200)
+      for (const d of deliverable) {
+        await updatePayment(org, runId, d.employee as Address, { status: 'failed', error: message })
+        failed.push({ employee: d.employee, name: d.name, error: message })
+      }
+      await appendAudit({
+        orgWallet: org,
+        at: new Date().toISOString(),
+        event: 'payment.failed',
+        actor,
+        runId,
+        detail: `Settled on-chain but delivery failed, funds are in the treasury: ${message}`,
+      })
     }
   }
 
@@ -257,12 +280,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     settled,
     failed,
     // Stated on every response so a caller can never mistake a settled-only run for a delivered one.
-    confidentialDelivery: deliveryLive
-      ? { ran: true, provider: provider.kind }
+    confidentialDelivery: delivery
+      ? {
+          ran: true,
+          method: 'stealth-addresses',
+          batchId: delivery.batchId,
+          fundTxHash: delivery.fundTxHash,
+          recipients: delivery.lines.length,
+        }
       : {
           ran: false,
           reason:
-            'Unlink credentials are not configured. Pay was settled on-chain and the commitment recorded; the shielded transfer was not performed.',
+            'No recipient had a private payout key registered, so nothing was delivered. Pay is settled and waiting in the treasury.',
         },
   })
 }

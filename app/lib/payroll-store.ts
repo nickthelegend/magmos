@@ -59,6 +59,15 @@ export interface PayrollPayment {
   sealRef?: string
   /** The shielded transfer's own hash, unreadable on the explorer. */
   sealTxHash?: string
+  /** One-time address this payment was delivered to. Unlinkable to the employee on-chain. */
+  stealthAddress?: string
+  /** Merkle proof for the claim. Stored so a claim never depends on re-deriving the tree from logs. */
+  claimProof?: string[]
+  /** Which on-chain batch holds it. */
+  batchId?: string
+  /** ECDH hint, so the employee can re-derive the stealth key rather than trust a stored address. */
+  ephemeralPubKey?: string
+  viewTag?: number
   status: 'queued' | 'settling' | 'sealed' | 'failed'
   error?: string
   createdAt: string
