@@ -61,29 +61,36 @@
     "name": "fundBatch",
     "inputs": [
       {
-        "name": "batchId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "root",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "total",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "recipientCount",
-        "type": "uint32",
-        "internalType": "uint32"
-      },
-      {
-        "name": "ttl",
-        "type": "uint64",
-        "internalType": "uint64"
+        "name": "b",
+        "type": "tuple",
+        "internalType": "struct MagmosStealthPayout.BatchInput",
+        "components": [
+          {
+            "name": "batchId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "root",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "total",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "recipientCount",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "ttl",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ]
       },
       {
         "name": "ephemeralPubKeys",
@@ -94,6 +101,16 @@
         "name": "viewTags",
         "type": "uint8[]",
         "internalType": "uint8[]"
+      },
+      {
+        "name": "encryptedAmounts",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "leaves",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
       }
     ],
     "outputs": [],
@@ -263,7 +280,7 @@
         "internalType": "uint8"
       },
       {
-        "name": "stealthAddressHint",
+        "name": "encryptedAmount",
         "type": "bytes32",
         "indexed": false,
         "internalType": "bytes32"
@@ -304,6 +321,25 @@
         "type": "uint64",
         "indexed": false,
         "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BatchLeaves",
+    "inputs": [
+      {
+        "name": "batchId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "leaves",
+        "type": "bytes32[]",
+        "indexed": false,
+        "internalType": "bytes32[]"
       }
     ],
     "anonymous": false

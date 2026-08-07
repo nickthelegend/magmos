@@ -70,6 +70,20 @@ contract MagmosStealthPayout is ReentrancyGuard {
         bool exists;
     }
 
+    /**
+     * @notice Batch metadata, grouped into one calldata struct.
+     * @dev Not cosmetic: passed as nine flat parameters this function exceeded the EVM's 16-slot
+     * reach and would not compile ("stack too deep"). A struct keeps it one slot and reads better at
+     * the call site than nine positional arguments.
+     */
+    struct BatchInput {
+        bytes32 batchId;
+        bytes32 root;
+        uint256 total;
+        uint32 recipientCount;
+        uint64 ttl;
+    }
+
     mapping(bytes32 batchId => Batch) private _batches;
     /// @dev Claim-once, keyed by leaf so a valid proof cannot be replayed.
     mapping(bytes32 batchId => mapping(bytes32 leaf => bool)) public leafClaimed;
@@ -93,13 +107,28 @@ contract MagmosStealthPayout is ReentrancyGuard {
      * @param ephemeralPubKey Compressed secp256k1 point R, 33 bytes.
      * @param viewTag First byte of the shared secret. Lets a scanning employee reject ~255/256 of
      * announcements with one hash instead of a full point multiplication.
+     * @param encryptedAmount The payment amount XORed with a one-time pad derived from the same
+     * shared secret. Only the recipient can remove the pad, and they need the amount to rebuild
+     * their own Merkle leaf — without this an employee could derive their stealth address from chain
+     * data but still not construct a proof, leaving them dependent on the employer's server to claim
+     * their own salary. The pad is never reused: the secret is unique per payment.
      */
     event Announcement(
         bytes32 indexed batchId,
         bytes ephemeralPubKey,
         uint8 viewTag,
-        bytes32 stealthAddressHint
+        bytes32 encryptedAmount
     );
+
+    /**
+     * @notice Every leaf in the batch, published so anyone can rebuild the tree.
+     * @dev Leaves are `keccak256(abi.encode(stealthAddress, amount))` — preimage-resistant, and the
+     * addresses inside are unlinkable anyway, so publishing them reveals nothing. What it buys is
+     * self-custody: combined with the decrypted amount from the Announcement, an employee can
+     * reconstruct the tree and derive their own proof from chain data alone. The server becomes a
+     * convenience rather than a dependency.
+     */
+    event BatchLeaves(bytes32 indexed batchId, bytes32[] leaves);
 
     event Claimed(bytes32 indexed batchId, address indexed to, uint256 amount);
     event Reclaimed(bytes32 indexed batchId, address indexed funder, uint256 amount);
@@ -144,62 +173,63 @@ contract MagmosStealthPayout is ReentrancyGuard {
      * find their payment from chain data alone — no out-of-band message from the employer, which
      * would be both a UX failure and a metadata leak.
      *
-     * @param batchId          Caller-chosen id. Reusing one reverts rather than overwriting a root,
-     *                         which would strip every unclaimed recipient of their proof.
-     * @param root             Merkle root over leaves `keccak256(abi.encode(stealthAddress, amount))`.
-     * @param total            Sum of all leaf amounts. Deposited here in full.
-     * @param recipientCount   How many leaves. Public, and deliberately so.
-     * @param ttl              Seconds until the funder may reclaim the remainder.
+     * @param b                Batch id, root, total, recipient count and TTL. Reusing an id reverts
+     *                         rather than overwriting a root, which would strip every unclaimed
+     *                         recipient of their proof.
      * @param ephemeralPubKeys One compressed point per recipient.
      * @param viewTags         One byte per recipient, same order.
+     * @param encryptedAmounts One per recipient, same order. Amount XOR a pad only they can derive.
+     * @param leaves           Every leaf, in tree order, so recipients can rebuild their own proofs.
      */
     function fundBatch(
-        bytes32 batchId,
-        bytes32 root,
-        uint256 total,
-        uint32 recipientCount,
-        uint64 ttl,
+        BatchInput calldata b,
         bytes[] calldata ephemeralPubKeys,
-        uint8[] calldata viewTags
+        uint8[] calldata viewTags,
+        bytes32[] calldata encryptedAmounts,
+        bytes32[] calldata leaves
     ) external nonReentrant {
-        if (_batches[batchId].exists) revert BatchExists();
-        if (root == bytes32(0) || total == 0) revert BadProof();
+        if (_batches[b.batchId].exists) revert BatchExists();
+        if (b.root == bytes32(0) || b.total == 0) revert BadProof();
         // A batch that expires immediately could be reclaimed before anyone can claim; one that
         // never expires strands funds forever.
-        if (ttl < 1 days || ttl > 365 days) revert InvalidExpiry();
+        if (b.ttl < 1 days || b.ttl > 365 days) revert InvalidExpiry();
 
-        uint64 expiresAt = uint64(block.timestamp) + ttl;
-        _batches[batchId] = Batch({
-            root: root,
-            total: total,
+        uint64 expiresAt = uint64(block.timestamp) + b.ttl;
+        _batches[b.batchId] = Batch({
+            root: b.root,
+            total: b.total,
             claimed: 0,
             funder: msg.sender,
             fundedAt: uint64(block.timestamp),
             expiresAt: expiresAt,
-            recipientCount: recipientCount,
+            recipientCount: b.recipientCount,
             exists: true
         });
 
-        token.safeTransferFrom(msg.sender, address(this), total);
-        emit BatchFunded(batchId, root, total, recipientCount, expiresAt);
+        token.safeTransferFrom(msg.sender, address(this), b.total);
+        emit BatchFunded(b.batchId, b.root, b.total, b.recipientCount, expiresAt);
 
         // Split out: emitting inline pushed `fundBatch` past the EVM's 16-slot reach ("stack too
         // deep"). Keeping it in its own frame is cheaper than enabling via-ir for the whole project.
-        _announce(batchId, ephemeralPubKeys, viewTags);
+        _announce(b.batchId, ephemeralPubKeys, viewTags, encryptedAmounts);
+        // One event rather than one per leaf: a client rebuilding the tree needs them in order and
+        // all at once, and a single array is far cheaper than N logs.
+        emit BatchLeaves(b.batchId, leaves);
     }
 
-    function _announce(bytes32 batchId, bytes[] calldata ephemeralPubKeys, uint8[] calldata viewTags)
-        private
-    {
+    function _announce(
+        bytes32 batchId,
+        bytes[] calldata ephemeralPubKeys,
+        uint8[] calldata viewTags,
+        bytes32[] calldata encryptedAmounts
+    ) private {
         uint256 n = ephemeralPubKeys.length;
         for (uint256 i = 0; i < n; ++i) {
-            // `stealthAddressHint` is a hash of the announcement's own position and point — enough
-            // for a client to deduplicate, not enough to reveal an address.
             emit Announcement(
                 batchId,
                 ephemeralPubKeys[i],
                 i < viewTags.length ? viewTags[i] : 0,
-                keccak256(abi.encode(batchId, i, ephemeralPubKeys[i]))
+                i < encryptedAmounts.length ? encryptedAmounts[i] : bytes32(0)
             );
         }
     }

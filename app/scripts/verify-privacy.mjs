@@ -41,8 +41,8 @@ const SEALED = [
   '0xec88d135b90b29f2ff03990bdc5e7b8656a85b8be6074c33df82a83c92e31817',
   // Produced by the DASHBOARD's own settle API, not a script — this is the path a judge exercises.
   '0x6cae5dfbb5bae6af7ae36323bec0a21fe2e67e535420da09d2dd21dcd7dc9ea9',
-  // Settlement leg of the full stealth run below.
-  '0x11eaf9027c2f28398ccd02fe95775b8f0f943575d7fdf04e18d6fafe81f25327',
+  // Settlement leg of the self-custody run below.
+  '0x471824f2a354b8a0063c82a1d50d581abc187b9b3e8211f68d71563e38ee5a2d',
 ]
 
 /**
@@ -53,10 +53,10 @@ const SEALED = [
  * These are the real transactions: the batch, then each employee's independent claim.
  */
 const DELIVERY = [
-  ['fundBatch', '0x561776540506a7b9794d503df8c18a3a9e2bda21ce7615462674c86c4d7f43dc'],
-  ['claim 1', '0x0a4016f7d7b3633a8a6c957464dfd9abfcc30d3c9be1ffa7faa65b978dce5005'],
-  ['claim 2', '0x1ec15b3b7803cf3203d886da13fb412e10d273936064a78004a418ed4d7eb901'],
-  ['claim 3', '0xe990ab3b32652e44c993ee2f346e3581f150210386385f5e5c4180fd260de66c'],
+  ['fundBatch', '0x983c94107532fb575a401cc3cfd3e2f6652fb5bd0e6e696f7ef2bb18a9c09d87'],
+  ['claim 1', '0xfe0a5f2ea6e131193da3680d90675f621a70d0e96347c5256f7ab9795a4f3c94'],
+  ['claim 2', '0xb6a513cab6a75226e68505aa26d741b4b5d4c8806124b44d9b554c003b4bbd2d'],
+  ['claim 3', '0xbd09f8f0392633fe33d90f5eae47e204424c7580fd6f8bebfdfdf893609a8d28'],
 ]
 
 /**
@@ -152,8 +152,9 @@ for (const [label, h] of DELIVERY) {
     `  ${label.padEnd(10)} block ${rc.blockNumber}  employee addresses exposed: ${leaked ? leakedRecipients.join(', ') : 'NONE'}`
   )
 }
-console.log('    → claims land at addresses the employees chose; none is their payroll wallet,')
-console.log('      and nothing on-chain ties a stealth address to a person.')
+console.log('    → claims land at addresses the employees chose; none is their payroll wallet.')
+console.log('    → every proof above was rebuilt by the recipient from published leaves and an')
+console.log('      encrypted amount — no server involved, so this survives Magmos disappearing.')
 
 console.log('\n── Control: the per-employee path, which is known to leak ─────')
 for (const h of LEAKY) {

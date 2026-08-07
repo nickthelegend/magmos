@@ -55,6 +55,7 @@ export interface DeliveredLine {
   proof: Hex[]
   ephemeralPubKey: Hex
   viewTag: number
+  encryptedAmount: Hex
 }
 
 export interface DeliveryResult {
@@ -84,7 +85,11 @@ export async function deliverBatch(
   if (totalMicros <= 0n) throw new Error('delivery total must be positive')
 
   // A fresh ephemeral key per line — reusing one would collapse every payment into one pseudonym.
-  const payments = lines.map((l) => ({ line: l, stealth: createStealthPayment(l.meta) }))
+  // The amount goes in encrypted so the recipient can rebuild their own leaf from chain data alone.
+  const payments = lines.map((l) => ({
+    line: l,
+    stealth: createStealthPayment(l.meta, l.amountMicros),
+  }))
   const leaves = payments.map((p) => payoutLeaf(p.stealth.stealthAddress, p.line.amountMicros))
   const { root, layers } = buildMerkleTree(leaves)
 
@@ -151,13 +156,18 @@ export async function deliverBatch(
     abi: STEALTH_PAYOUT_ABI,
     functionName: 'fundBatch',
     args: [
-      batchId,
-      root,
-      totalMicros,
-      payments.length,
-      CLAIM_WINDOW_SECONDS,
+      {
+        batchId,
+        root,
+        total: totalMicros,
+        recipientCount: payments.length,
+        ttl: CLAIM_WINDOW_SECONDS,
+      },
       payments.map((p) => p.stealth.ephemeralPubKey),
       payments.map((p) => p.stealth.viewTag),
+      payments.map((p) => p.stealth.encryptedAmount),
+      // Published so any recipient can rebuild the tree and derive their own proof without us.
+      leaves,
     ],
   })
   const rc = await settlementPublicClient.waitForTransactionReceipt({ hash: fundTxHash })
@@ -176,6 +186,7 @@ export async function deliverBatch(
       proof: proofs[i],
       ephemeralPubKey: p.stealth.ephemeralPubKey,
       viewTag: p.stealth.viewTag,
+      encryptedAmount: p.stealth.encryptedAmount,
     })),
   }
 }

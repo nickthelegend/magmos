@@ -40,7 +40,7 @@ export const MAGMOS_EQUITY_VAULT = (process.env.NEXT_PUBLIC_MAGMOS_EQUITY_VAULT 
   '0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7') as `0x${string}`
 /** Confidential delivery. Holds a payroll batch as a Merkle root; employees claim to stealth keys. */
 export const MAGMOS_STEALTH_PAYOUT = (process.env.NEXT_PUBLIC_MAGMOS_STEALTH_PAYOUT ||
-  '0x913e3841659f5a77222190E00E1A07279360494c') as `0x${string}`
+  '0x20839c0D8a7453EE58F955e07C545607dA798ba7') as `0x${string}`
 
 // Pyth-shaped on-chain price relay (fed the real AAPL/USD feed from Pyth Hermes). Swapping this
 // for canonical Pyth is an address change, not a code change — the vault reads IPyth either way.

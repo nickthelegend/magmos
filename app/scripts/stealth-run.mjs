@@ -37,6 +37,7 @@ import {
   createStealthPayment,
   deriveStealthKeys,
   merkleProof,
+  reconstructClaim,
   payoutLeaf,
   verifyProof,
 } from '../lib/stealth.ts'
@@ -144,7 +145,7 @@ const amounts = rates.map((r) => (total * r) / rateSum)
 // Dust from integer division goes to the first recipient so the leaves sum to the deposit exactly.
 amounts[0] += total - amounts.reduce((a, b) => a + b, 0n)
 
-const payments = employees.map((e, i) => ({ ...createStealthPayment(e.keys), amount: amounts[i], who: e.name }))
+const payments = employees.map((e, i) => ({ ...createStealthPayment(e.keys, amounts[i]), amount: amounts[i], who: e.name }))
 const leaves = payments.map((p) => payoutLeaf(p.stealthAddress, p.amount))
 const { root, layers } = buildMerkleTree(leaves)
 for (const [i, p] of payments.entries()) {
@@ -155,7 +156,13 @@ const batchId = keccak256(toHex(`magmos:batch:${runId}`))
 await wait(await orgC.writeContract({ address: dep.MagmosUSDC, abi: usdcAbi, functionName: 'approve', args: [dep.MagmosStealthPayout, total] }))
 const fundTx = await orgC.writeContract({
   address: dep.MagmosStealthPayout, abi: payoutAbi, functionName: 'fundBatch',
-  args: [batchId, root, total, payments.length, 2_592_000n, payments.map((p) => p.ephemeralPubKey), payments.map((p) => p.viewTag)],
+  args: [
+    { batchId, root, total, recipientCount: payments.length, ttl: 2_592_000n },
+    payments.map((p) => p.ephemeralPubKey),
+    payments.map((p) => p.viewTag),
+    payments.map((p) => p.encryptedAmount),
+    leaves,
+  ],
 })
 await wait(fundTx)
 console.log(`  committed ${payments.length} payments totalling ${usd(total)} USDC`)
@@ -168,18 +175,27 @@ const annLogs = await pub.getLogs({
   event: payoutAbi.find((x) => x.type === 'event' && x.name === 'Announcement'),
   fromBlock: settleRc.blockNumber, toBlock: 'latest',
 })
-const announcements = annLogs.map((l) => ({ eph: l.args.ephemeralPubKey, tag: Number(l.args.viewTag) }))
+const announcements = annLogs.map((l) => ({ eph: l.args.ephemeralPubKey, tag: Number(l.args.viewTag), enc: l.args.encryptedAmount }))
 console.log(`  ${announcements.length} announcement(s) on-chain, none of which names anyone`)
+
+// SELF-CUSTODY: rebuild everything from chain logs. Nothing below reads the local `payments` array
+// for anything an employee could not fetch themselves.
+const leafLogs = await pub.getLogs({
+  address: dep.MagmosStealthPayout,
+  event: payoutAbi.find((x) => x.type === 'event' && x.name === 'BatchLeaves'),
+  fromBlock: settleRc.blockNumber, toBlock: 'latest',
+})
+const onChainLeaves = leafLogs.at(-1).args.leaves
+console.log(`  ${onChainLeaves.length} leaf/leaves published on-chain — enough to rebuild the tree`)
 
 const found = []
 for (const e of employees) {
   const hits = announcements
-    .map((a) => checkAnnouncement(e.keys, a.eph, a.tag))
+    .map((a) => reconstructClaim(e.keys, { ephemeralPubKey: a.eph, viewTag: a.tag, encryptedAmount: a.enc }, onChainLeaves))
     .filter(Boolean)
   if (hits.length !== 1) { console.log(`  ✗ ${e.name}: found ${hits.length} payments, expected 1`); continue }
-  const p = payments.find((x) => x.stealthAddress.toLowerCase() === hits[0].stealthAddress.toLowerCase())
-  console.log(`  ✓ ${e.name} located their payment unaided — ${usd(p.amount)} USDC`)
-  found.push({ e, hit: hits[0], amount: p.amount, index: payments.indexOf(p) })
+  console.log(`  ✓ ${e.name} rebuilt amount AND proof from chain data — ${usd(hits[0].amountMicros)} USDC, ${hits[0].proof.length}-node proof`)
+  found.push({ e, hit: hits[0], amount: hits[0].amountMicros, proof: hits[0].proof })
 }
 
 // ── 4. claim via relayer ────────────────────────────────────────────────────
@@ -195,7 +211,8 @@ for (const f of found) {
   // The ORG relays. It never learns which employee this is — it only sees a valid signature.
   const tx = await orgC.writeContract({
     address: dep.MagmosStealthPayout, abi: payoutAbi, functionName: 'claim',
-    args: [batchId, f.amount, dest, merkleProof(layers, f.index), sig],
+    // The proof came from the employee's own reconstruction, not from our local tree.
+    args: [batchId, f.amount, dest, f.proof, sig],
   })
   await wait(tx)
   const bal = await pub.readContract({ address: dep.MagmosUSDC, abi: usdcAbi, functionName: 'balanceOf', args: [dest] })

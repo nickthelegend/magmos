@@ -102,7 +102,10 @@ function sharedSecret(scalarHex: Hex, pointHex: Hex): Hex {
  * A fresh ephemeral key per payment is what makes two salaries to the same person unlinkable. Reusing
  * `r` across a batch would collapse the whole scheme into a single pseudonym.
  */
-export function createStealthPayment(meta: StealthMetaAddress): StealthPayment & { ephemeralPrivKey: Hex } {
+export function createStealthPayment(
+  meta: StealthMetaAddress,
+  amountMicros?: bigint
+): StealthPayment & { ephemeralPrivKey: Hex; encryptedAmount: Hex } {
   const ephemeralPrivKey = bytesToHex(secp256k1.utils.randomSecretKey())
   const ephemeralPubKey = bytesToHex(secp256k1.getPublicKey(hexToBytes(ephemeralPrivKey), true))
 
@@ -114,7 +117,31 @@ export function createStealthPayment(meta: StealthMetaAddress): StealthPayment &
     ephemeralPubKey,
     viewTag: parseInt(secret.slice(2, 4), 16),
     ephemeralPrivKey,
+    encryptedAmount: encryptAmount(secret, amountMicros ?? 0n),
   }
+}
+
+/**
+ * One-time pad for the payment amount, derived from the same ECDH secret.
+ *
+ * The recipient needs to know their amount to rebuild their own Merkle leaf. Without it they could
+ * derive their stealth address from chain data and still be unable to construct a proof — dependent
+ * on the employer's server to claim their own salary. XOR with a hash of the secret is a genuine
+ * one-time pad here because the secret is unique per payment and never reused; there is no key
+ * schedule to get wrong.
+ */
+function amountPad(secret: Hex): bigint {
+  return BigInt(keccak256(toHex(`magmos:amount-pad:${secret}`)))
+}
+
+/** Encrypt an amount for exactly one recipient. */
+export function encryptAmount(secret: Hex, amountMicros: bigint): Hex {
+  return toHex(amountMicros ^ amountPad(secret), { size: 32 })
+}
+
+/** Recover it. Same operation — XOR is its own inverse. */
+export function decryptAmount(secret: Hex, encrypted: Hex): bigint {
+  return BigInt(encrypted) ^ amountPad(secret)
 }
 
 /** `P = S + s·G`, then the usual address derivation. Shared by both sides so they cannot disagree. */
@@ -135,8 +162,9 @@ function stealthAddressFrom(spendingPubKey: Hex, secret: Hex): Address {
 export function checkAnnouncement(
   keys: StealthKeys,
   ephemeralPubKey: Hex,
-  viewTag: number
-): { stealthAddress: Address; stealthPrivKey: Hex } | null {
+  viewTag: number,
+  encryptedAmount?: Hex
+): { stealthAddress: Address; stealthPrivKey: Hex; amountMicros?: bigint } | null {
   let secret: Hex
   try {
     secret = sharedSecret(keys.viewingPrivKey, ephemeralPubKey)
@@ -156,7 +184,49 @@ export function checkAnnouncement(
   if (privateKeyToAccount(stealthPrivKey).address.toLowerCase() !== stealthAddress.toLowerCase()) {
     return null
   }
-  return { stealthAddress, stealthPrivKey }
+  return {
+    stealthAddress,
+    stealthPrivKey,
+    amountMicros: encryptedAmount ? decryptAmount(secret, encryptedAmount) : undefined,
+  }
+}
+
+/**
+ * Reconstruct a claim entirely from chain data.
+ *
+ * This is what makes the scheme self-custodial rather than server-dependent. Given the batch's
+ * published leaves and the recipient's own announcement, it finds their leaf and derives the proof
+ * without asking anyone. If Magmos disappeared tomorrow, an employee with their wallet could still
+ * produce everything the contract needs.
+ *
+ * Returns null when the decrypted amount does not produce a leaf that is actually in the batch —
+ * which is the honest answer for a corrupted or foreign announcement, rather than a proof that will
+ * revert on-chain.
+ */
+export function reconstructClaim(
+  keys: StealthKeys,
+  announcement: { ephemeralPubKey: Hex; viewTag: number; encryptedAmount: Hex },
+  publishedLeaves: Hex[]
+): { stealthAddress: Address; stealthPrivKey: Hex; amountMicros: bigint; proof: Hex[]; leaf: Hex } | null {
+  const found = checkAnnouncement(
+    keys,
+    announcement.ephemeralPubKey,
+    announcement.viewTag,
+    announcement.encryptedAmount
+  )
+  if (!found || found.amountMicros === undefined) return null
+
+  const leaf = payoutLeaf(found.stealthAddress, found.amountMicros)
+  const index = publishedLeaves.findIndex((l) => l.toLowerCase() === leaf.toLowerCase())
+  if (index === -1) return null
+
+  const { root, layers } = buildMerkleTree(publishedLeaves)
+  const proof = merkleProof(layers, index)
+  // Check locally before handing it to the chain — a failing proof here means corrupted leaf data,
+  // and finding out via a reverted transaction costs gas and explains nothing.
+  if (!verifyProof(leaf, proof, root)) return null
+
+  return { ...found, amountMicros: found.amountMicros, proof, leaf }
 }
 
 // ─────────────────────────── Merkle commitment ───────────────────────────

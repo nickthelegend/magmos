@@ -74,8 +74,20 @@ contract MagmosStealthPayoutTest is Test {
         tags[0] = 0x7f;
         tags[1] = 0x2c;
 
+        bytes32[] memory encAmts = new bytes32[](2);
+        encAmts[0] = bytes32(uint256(0xdead));
+        encAmts[1] = bytes32(uint256(0xbeef));
+        bytes32[] memory ls = new bytes32[](2);
+        ls[0] = la;
+        ls[1] = lb;
+
         vm.prank(org);
-        payout.fundBatch(BATCH, _root(la, lb), ALICE_AMT + BOB_AMT, 2, TTL, eph, tags);
+        payout.fundBatch(
+            MagmosStealthPayout.BatchInput({
+                batchId: BATCH, root: _root(la, lb), total: ALICE_AMT + BOB_AMT, recipientCount: 2, ttl: TTL
+            }),
+            eph, tags, encAmts, ls
+        );
     }
 
     function _sign(uint256 pk, uint256 amount, address to) internal view returns (bytes memory) {
@@ -108,17 +120,25 @@ contract MagmosStealthPayoutTest is Test {
         _fund();
         bytes[] memory eph = new bytes[](0);
         uint8[] memory tags = new uint8[](0);
+        bytes32[] memory none = new bytes32[](0);
         vm.prank(org);
         vm.expectRevert(MagmosStealthPayout.BatchExists.selector);
-        payout.fundBatch(BATCH, keccak256("other"), 1e6, 1, TTL, eph, tags);
+        payout.fundBatch(
+            MagmosStealthPayout.BatchInput({batchId: BATCH, root: keccak256("other"), total: 1e6, recipientCount: 1, ttl: TTL}),
+            eph, tags, none, none
+        );
     }
 
     function test_Fund_RejectsAbsurdTtl() public {
         bytes[] memory eph = new bytes[](0);
         uint8[] memory tags = new uint8[](0);
+        bytes32[] memory none = new bytes32[](0);
         vm.prank(org);
         vm.expectRevert(MagmosStealthPayout.InvalidExpiry.selector);
-        payout.fundBatch(BATCH, keccak256("r"), 1e6, 1, 1 hours, eph, tags);
+        payout.fundBatch(
+            MagmosStealthPayout.BatchInput({batchId: BATCH, root: keccak256("r"), total: 1e6, recipientCount: 1, ttl: 1 hours}),
+            eph, tags, none, none
+        );
     }
 
     // ---- the privacy property ---------------------------------------------
@@ -278,5 +298,50 @@ contract MagmosStealthPayoutTest is Test {
         vm.prank(relayer);
         payout.claim(BATCH, ALICE_AMT, dest, _proof(lb), _sign(aliceStealthPk, ALICE_AMT, dest));
         assertEq(usdc.balanceOf(dest), ALICE_AMT);
+    }
+
+    /**
+     * Self-custody: the chain must carry everything a recipient needs to claim without the
+     * employer's server. That means the leaves, so the tree can be rebuilt, and an encrypted amount,
+     * so the recipient knows which leaf is theirs.
+     */
+    function test_Fund_PublishesLeavesAndEncryptedAmounts() public {
+        vm.recordLogs();
+        (bytes32 la, bytes32 lb) = _fund();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 leavesSig = keccak256("BatchLeaves(bytes32,bytes32[])");
+        bytes32 annSig = keccak256("Announcement(bytes32,bytes,uint8,bytes32)");
+        bool sawLeaves;
+        uint256 announcements;
+
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] == leavesSig) {
+                sawLeaves = true;
+                bytes32[] memory published = abi.decode(logs[i].data, (bytes32[]));
+                assertEq(published.length, 2, "every leaf published");
+                assertEq(published[0], la);
+                assertEq(published[1], lb);
+            }
+            if (logs[i].topics[0] == annSig) announcements++;
+        }
+        assertTrue(sawLeaves, "BatchLeaves emitted");
+        assertEq(announcements, 2, "one announcement per recipient");
+    }
+
+    /// Publishing leaves must not publish recipients — they are hashes, and that is the point.
+    function test_Fund_LeavesRevealNoAddress() public {
+        vm.recordLogs();
+        _fund();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 leavesSig = keccak256("BatchLeaves(bytes32,bytes32[])");
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] != leavesSig) continue;
+            bytes32[] memory published = abi.decode(logs[i].data, (bytes32[]));
+            for (uint256 j = 0; j < published.length; ++j) {
+                assertTrue(published[j] != bytes32(uint256(uint160(aliceStealth))), "alice leaked");
+                assertTrue(published[j] != bytes32(uint256(uint160(bobStealth))), "bob leaked");
+            }
+        }
     }
 }

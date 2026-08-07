@@ -3,6 +3,9 @@ import { keccak256, toHex, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import {
   buildMerkleTree,
+  decryptAmount,
+  encryptAmount,
+  reconstructClaim,
   checkAnnouncement,
   createStealthPayment,
   deriveStealthKeys,
@@ -141,5 +144,91 @@ describe('merkle commitment', () => {
 
   test('empty input is an error, not a silent empty root', () => {
     expect(() => buildMerkleTree([])).toThrow()
+  })
+})
+
+describe('amount encryption', () => {
+  test('round-trips exactly, including large values', () => {
+    const secret = keccak256(toHex('some-shared-secret')) as Hex
+    for (const amt of [0n, 1n, 3_000_000n, 2n ** 64n, 2n ** 200n]) {
+      expect(decryptAmount(secret, encryptAmount(secret, amt))).toBe(amt)
+    }
+  })
+
+  test('a different secret does not recover the amount', () => {
+    const a = keccak256(toHex('secret-a')) as Hex
+    const b = keccak256(toHex('secret-b')) as Hex
+    expect(decryptAmount(b, encryptAmount(a, 3_000_000n))).not.toBe(3_000_000n)
+  })
+
+  test('the ciphertext does not equal the plaintext', () => {
+    // A pad that happened to be zero would silently publish every salary.
+    const secret = keccak256(toHex('s')) as Hex
+    expect(BigInt(encryptAmount(secret, 3_000_000n))).not.toBe(3_000_000n)
+  })
+
+  test('the recipient recovers the amount from their own announcement', () => {
+    const alice = keysFor('alice')
+    const p = createStealthPayment(alice, 4_250_000n)
+    const found = checkAnnouncement(alice, p.ephemeralPubKey, p.viewTag, p.encryptedAmount)
+    expect(found?.amountMicros).toBe(4_250_000n)
+  })
+
+  test('someone else cannot', () => {
+    const p = createStealthPayment(keysFor('alice'), 4_250_000n)
+    expect(checkAnnouncement(keysFor('bob'), p.ephemeralPubKey, p.viewTag, p.encryptedAmount)).toBeNull()
+  })
+})
+
+describe('self-custody reconstruction', () => {
+  const batchOf = (specs: { who: string; amount: bigint }[]) => {
+    const payments = specs.map((s) => ({
+      ...createStealthPayment(keysFor(s.who), s.amount),
+      amount: s.amount,
+    }))
+    const leaves = payments.map((p) => payoutLeaf(p.stealthAddress, p.amount))
+    return { payments, leaves }
+  }
+
+  test('an employee derives their own proof from chain data alone', () => {
+    const specs = [
+      { who: 'alice', amount: 3_000_000n },
+      { who: 'bob', amount: 5_500_000n },
+      { who: 'carol', amount: 1_250_000n },
+    ]
+    const { payments, leaves } = batchOf(specs)
+    const { root } = buildMerkleTree(leaves)
+
+    specs.forEach((spec, i) => {
+      const keys = keysFor(spec.who)
+      // Only public chain data: every announcement, and every published leaf.
+      const mine = payments
+        .map((p) => reconstructClaim(keys, p, leaves))
+        .filter(Boolean)
+      expect(mine.length).toBe(1)
+      expect(mine[0]!.amountMicros).toBe(spec.amount)
+      expect(mine[0]!.stealthAddress.toLowerCase()).toBe(payments[i].stealthAddress.toLowerCase())
+      expect(verifyProof(mine[0]!.leaf, mine[0]!.proof, root)).toBe(true)
+    })
+  })
+
+  test('the derived key controls the address the proof commits to', () => {
+    const { payments, leaves } = batchOf([{ who: 'alice', amount: 9_000_000n }])
+    const r = reconstructClaim(keysFor('alice'), payments[0], leaves)!
+    expect(privateKeyToAccount(r.stealthPrivKey).address.toLowerCase()).toBe(
+      r.stealthAddress.toLowerCase()
+    )
+  })
+
+  test('returns null when the leaf is not in the batch', () => {
+    // Corrupted or foreign leaf data: better a null than a proof that reverts on-chain.
+    const { payments } = batchOf([{ who: 'alice', amount: 3_000_000n }])
+    const wrongLeaves = [payoutLeaf('0x000000000000000000000000000000000000dEaD', 1n)]
+    expect(reconstructClaim(keysFor('alice'), payments[0], wrongLeaves)).toBeNull()
+  })
+
+  test("returns null for someone else's announcement", () => {
+    const { payments, leaves } = batchOf([{ who: 'alice', amount: 3_000_000n }])
+    expect(reconstructClaim(keysFor('bob'), payments[0], leaves)).toBeNull()
   })
 })
