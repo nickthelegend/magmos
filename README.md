@@ -82,7 +82,7 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 | Contract | Address |
 |---|---|
 | MagmosPayroll | `0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B` |
-| MagmosStealthPayout (confidential delivery) | `0x20839c0D8a7453EE58F955e07C545607dA798ba7` |
+| MagmosStealthPayout (confidential delivery) | `0x20468905767bA68F76DA243784546D0584395A3D` |
 | MagmosAdvance (earned wage access) | `0x532791bC95152424739950a90AC986FF196097FC` |
 | MagmosEquityVault (oracle-priced RSU vesting) | `0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7` |
 | PythPriceRelay (AAPL/USD feed) | `0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B` |

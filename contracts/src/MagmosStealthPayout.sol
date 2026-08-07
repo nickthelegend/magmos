@@ -254,9 +254,55 @@ contract MagmosStealthPayout is ReentrancyGuard {
         bytes32[] calldata proof,
         bytes calldata sig
     ) external nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+        uint256 paid = _claimOne(batchId, amount, to, proof, sig);
+        token.safeTransfer(to, paid);
+    }
+
+    /**
+     * @notice Claim several payments in one transaction.
+     * @dev An employee paid monthly accrues one leaf per run, and claiming them one at a time costs
+     * a transaction each — on a small salary the gas is a real fraction of the pay. It also hurts
+     * privacy in a subtler way: several claims in quick succession from the same relayer are easier
+     * to group than one.
+     *
+     * Each entry is verified independently, so a single bad proof reverts the whole call rather than
+     * silently paying the rest. Partial success here would be worse than failure — the caller would
+     * have to diff what landed against what they asked for to find out what happened.
+     *
+     * All proceeds go to one destination, which is the normal case and keeps every signature
+     * committed to the same address.
+     */
+    function claimMany(
+        bytes32[] calldata batchIds,
+        uint256[] calldata amounts,
+        address to,
+        bytes32[][] calldata proofs,
+        bytes[] calldata sigs
+    ) external nonReentrant returns (uint256 totalPaid) {
+        if (to == address(0)) revert ZeroAddress();
+        uint256 n = batchIds.length;
+        if (n == 0 || amounts.length != n || proofs.length != n || sigs.length != n) revert BadProof();
+
+        for (uint256 i = 0; i < n; ++i) {
+            totalPaid += _claimOne(batchIds[i], amounts[i], to, proofs[i], sigs[i]);
+        }
+
+        // One transfer rather than n: cheaper, and it publishes a single total instead of a
+        // per-payment breakdown an observer could line up against known salaries.
+        token.safeTransfer(to, totalPaid);
+    }
+
+    /// @dev Shared by `claim` and `claimMany` so the two can never diverge on what a valid claim is.
+    function _claimOne(
+        bytes32 batchId,
+        uint256 amount,
+        address to,
+        bytes32[] calldata proof,
+        bytes calldata sig
+    ) private returns (uint256) {
         Batch storage b = _batches[batchId];
         if (!b.exists) revert BatchNotFound();
-        if (to == address(0)) revert ZeroAddress();
 
         bytes32 digest = MessageHashUtils.toTypedDataHash(
             _domainSeparator, keccak256(abi.encode(CLAIM_TYPEHASH, batchId, amount, to))
@@ -267,16 +313,27 @@ contract MagmosStealthPayout is ReentrancyGuard {
         bytes32 leaf = keccak256(abi.encode(stealth, amount));
         if (leafClaimed[batchId][leaf]) revert AlreadyClaimed();
         if (!MerkleProof.verify(proof, b.root, leaf)) revert BadProof();
-
-        // Guards against a malformed root whose leaves sum to more than was deposited: the first
-        // claimants would drain it and the last would find an empty contract.
         if (b.claimed + amount > b.total) revert InsufficientBatchBalance();
 
         leafClaimed[batchId][leaf] = true;
         b.claimed += amount;
-
         emit Claimed(batchId, to, amount);
-        token.safeTransfer(to, amount);
+        return amount;
+    }
+
+    /// @notice Has this exact (address, amount) already been taken from this batch?
+    function isClaimed(bytes32 batchId, address stealthAddress, uint256 amount)
+        external
+        view
+        returns (bool)
+    {
+        return leafClaimed[batchId][keccak256(abi.encode(stealthAddress, amount))];
+    }
+
+    /// @notice What is left in a batch. Zero once everyone has claimed.
+    function unclaimedOf(bytes32 batchId) external view returns (uint256) {
+        Batch storage b = _batches[batchId];
+        return b.exists ? b.total - b.claimed : 0;
     }
 
     /**

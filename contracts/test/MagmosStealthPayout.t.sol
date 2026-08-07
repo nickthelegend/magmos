@@ -344,4 +344,149 @@ contract MagmosStealthPayoutTest is Test {
             }
         }
     }
+
+    // ---- claimMany ---------------------------------------------------------
+
+    /// A second batch so one person genuinely has two payments outstanding.
+    function _fundSecond() internal returns (bytes32 batch2, bytes32 la2, bytes32 lb2) {
+        batch2 = keccak256("magmos:run:2026-09");
+        la2 = _leaf(aliceStealth, 1_000e6);
+        lb2 = _leaf(bobStealth, 2_000e6);
+
+        bytes[] memory eph = new bytes[](2);
+        eph[0] = hex"02aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+        eph[1] = hex"03112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00";
+        uint8[] memory tags = new uint8[](2);
+        bytes32[] memory enc = new bytes32[](2);
+        bytes32[] memory ls = new bytes32[](2);
+        ls[0] = la2;
+        ls[1] = lb2;
+
+        vm.prank(org);
+        payout.fundBatch(
+            MagmosStealthPayout.BatchInput({
+                batchId: batch2, root: _root(la2, lb2), total: 3_000e6, recipientCount: 2, ttl: TTL
+            }),
+            eph, tags, enc, ls
+        );
+    }
+
+    function _sign2(uint256 pk, bytes32 batchId, uint256 amount, address to)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 structHash = keccak256(
+            abi.encode(keccak256("Claim(bytes32 batchId,uint256 amount,address to)"), batchId, amount, to)
+        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(pk, keccak256(abi.encodePacked("\x19\x01", domSep, structHash)));
+        return abi.encodePacked(r, s, v);
+    }
+
+    function test_ClaimMany_PaysEveryLeafInOneTransfer() public {
+        (, bytes32 lb) = _fund();
+        (bytes32 batch2, , bytes32 lb2) = _fundSecond();
+
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = BATCH;
+        ids[1] = batch2;
+        uint256[] memory amts = new uint256[](2);
+        amts[0] = ALICE_AMT;
+        amts[1] = 1_000e6;
+        bytes32[][] memory proofs = new bytes32[][](2);
+        proofs[0] = _proof(lb);
+        proofs[1] = _proof(lb2);
+        bytes[] memory sigs = new bytes[](2);
+        sigs[0] = _sign2(aliceStealthPk, BATCH, ALICE_AMT, aliceCashOut);
+        sigs[1] = _sign2(aliceStealthPk, batch2, 1_000e6, aliceCashOut);
+
+        vm.prank(relayer);
+        uint256 paid = payout.claimMany(ids, amts, aliceCashOut, proofs, sigs);
+
+        assertEq(paid, ALICE_AMT + 1_000e6, "both leaves paid");
+        assertEq(usdc.balanceOf(aliceCashOut), ALICE_AMT + 1_000e6, "in one transfer");
+        assertTrue(payout.isClaimed(BATCH, aliceStealth, ALICE_AMT));
+        assertTrue(payout.isClaimed(batch2, aliceStealth, 1_000e6));
+    }
+
+    /// One bad proof must revert everything — partial success would leave the caller diffing what
+    /// landed against what they asked for.
+    function test_ClaimMany_OneBadProofRevertsAll() public {
+        (, bytes32 lb) = _fund();
+        (bytes32 batch2, , ) = _fundSecond();
+
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = BATCH;
+        ids[1] = batch2;
+        uint256[] memory amts = new uint256[](2);
+        amts[0] = ALICE_AMT;
+        amts[1] = 1_000e6;
+        bytes32[][] memory proofs = new bytes32[][](2);
+        proofs[0] = _proof(lb);
+        proofs[1] = _proof(keccak256("garbage"));
+        bytes[] memory sigs = new bytes[](2);
+        sigs[0] = _sign2(aliceStealthPk, BATCH, ALICE_AMT, aliceCashOut);
+        sigs[1] = _sign2(aliceStealthPk, batch2, 1_000e6, aliceCashOut);
+
+        vm.prank(relayer);
+        vm.expectRevert(MagmosStealthPayout.BadProof.selector);
+        payout.claimMany(ids, amts, aliceCashOut, proofs, sigs);
+
+        assertEq(usdc.balanceOf(aliceCashOut), 0, "nothing paid");
+        assertFalse(payout.isClaimed(BATCH, aliceStealth, ALICE_AMT), "first leaf not burned");
+    }
+
+    function test_ClaimMany_RejectsMismatchedArrayLengths() public {
+        _fund();
+        bytes32[] memory ids = new bytes32[](2);
+        uint256[] memory amts = new uint256[](1);
+        bytes32[][] memory proofs = new bytes32[][](2);
+        bytes[] memory sigs = new bytes[](2);
+        vm.expectRevert(MagmosStealthPayout.BadProof.selector);
+        payout.claimMany(ids, amts, aliceCashOut, proofs, sigs);
+    }
+
+    function test_ClaimMany_RejectsEmpty() public {
+        bytes32[] memory ids = new bytes32[](0);
+        uint256[] memory amts = new uint256[](0);
+        bytes32[][] memory proofs = new bytes32[][](0);
+        bytes[] memory sigs = new bytes[](0);
+        vm.expectRevert(MagmosStealthPayout.BadProof.selector);
+        payout.claimMany(ids, amts, aliceCashOut, proofs, sigs);
+    }
+
+    /// The same leaf twice in one call must not pay twice.
+    function test_ClaimMany_CannotDoubleSpendWithinOneCall() public {
+        (, bytes32 lb) = _fund();
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = BATCH;
+        ids[1] = BATCH;
+        uint256[] memory amts = new uint256[](2);
+        amts[0] = ALICE_AMT;
+        amts[1] = ALICE_AMT;
+        bytes32[][] memory proofs = new bytes32[][](2);
+        proofs[0] = _proof(lb);
+        proofs[1] = _proof(lb);
+        bytes[] memory sigs = new bytes[](2);
+        sigs[0] = _sign2(aliceStealthPk, BATCH, ALICE_AMT, aliceCashOut);
+        sigs[1] = _sign2(aliceStealthPk, BATCH, ALICE_AMT, aliceCashOut);
+
+        vm.prank(relayer);
+        vm.expectRevert(MagmosStealthPayout.AlreadyClaimed.selector);
+        payout.claimMany(ids, amts, aliceCashOut, proofs, sigs);
+    }
+
+    function test_Views_UnclaimedTracksClaims() public {
+        (, bytes32 lb) = _fund();
+        assertEq(payout.unclaimedOf(BATCH), ALICE_AMT + BOB_AMT);
+        vm.prank(relayer);
+        payout.claim(BATCH, ALICE_AMT, aliceCashOut, _proof(lb), _sign(aliceStealthPk, ALICE_AMT, aliceCashOut));
+        assertEq(payout.unclaimedOf(BATCH), BOB_AMT);
+    }
+
+    function test_Views_UnknownBatchIsZeroNotARevert() public view {
+        // A client polling an unknown id should get 0, not an exception to special-case.
+        assertEq(payout.unclaimedOf(keccak256("never-funded")), 0);
+    }
 }
