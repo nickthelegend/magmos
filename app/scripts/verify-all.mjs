@@ -122,10 +122,11 @@ await step('SDK stealth crypto matches the app', async () => {
   // nobody can spend from — so they are compared body-for-body, ignoring only the header comment.
   const strip = (f) =>
     readFileSync(f, 'utf8').replace(/^\/\*\*[\s\S]*?\*\/\n/, '').trim()
-  const a = strip(`${ROOT}app/lib/stealth.ts`)
-  const b = strip(`${ROOT}sdk/src/stealth.ts`)
-  if (a === b) ok('app/lib/stealth.ts and sdk/src/stealth.ts are identical below the header')
-  else bad('SDK stealth crypto has DRIFTED from the app — they must derive identical addresses')
+  const base = strip(`${ROOT}app/lib/stealth.ts`)
+  for (const copy of ['sdk/src/stealth.ts', 'employee/src/lib/stealth.ts']) {
+    if (strip(`${ROOT}${copy}`) === base) ok(`${copy} matches app/lib/stealth.ts`)
+    else bad(`${copy} has DRIFTED — the copies must derive identical addresses`)
+  }
 })
 
 await step('No mocks left in shipped code', async () => {

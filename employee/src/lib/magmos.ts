@@ -4,6 +4,7 @@
 import type { Abi } from 'viem'
 import { encodeAbiParameters, keccak256 } from 'viem'
 import payrollAbi from './abi/MagmosPayroll.json'
+import stealthPayoutAbi from './abi/MagmosStealthPayout.json'
 import registryAbi from './abi/MagmosRegistry.json'
 import vaultAbi from './abi/MagmosVault.json'
 import advanceAbi from './abi/MagmosAdvance.json'
@@ -54,6 +55,11 @@ export const WEEK_S = 604_800
 export const MONTH_S = 2_592_000 // 30 days — default stream rate period
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
+
+/** Confidential delivery. Where a worker's private payouts are escrowed until they claim. */
+export const MAGMOS_STEALTH_PAYOUT = (process.env.NEXT_PUBLIC_MAGMOS_STEALTH_PAYOUT ||
+  '0x20468905767bA68F76DA243784546D0584395A3D') as `0x${string}`
+export const STEALTH_PAYOUT_ABI = stealthPayoutAbi as Abi
 
 export const EXPLORER_TX = (hash: string) => `${ARC_EXPLORER}/tx/${hash}`
 export const EXPLORER_ADDR = (addr: string) => `${ARC_EXPLORER}/address/${addr}`
