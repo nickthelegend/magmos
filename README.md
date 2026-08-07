@@ -25,7 +25,7 @@ dollar-denominated fees, deterministic finality, no seed phrase required (passke
 
 ```
 magmos/
-├── contracts/       Solidity (Foundry) — 6 contracts live on Arc testnet, 93 tests
+├── contracts/       Solidity (Foundry) — 8 contracts live on Arc testnet, 139 tests
 ├── app/             Org dashboard + landing (Next.js 16 + wagmi/viem + Mongo)  → :3100  ▲ Vercel
 ├── employee/        Recipient portal (live ticker, claim, vault, CCTP, passkey)   → :3001
 ├── sdk/             @magmos/sdk — drop-in Pay button + stream client (wagmi/viem)
@@ -46,6 +46,8 @@ magmos/
 | On-chain receipts & activity feed | ✅ |
 | In-app test-USDC **faucet** | ✅ |
 | Org/recipient metadata API (EIP-191 auth + MongoDB) | ✅ |
+| **Confidential payroll** — one-transaction settlement, nobody named on-chain | ✅ live on Arc |
+| **Stealth-address delivery** — salary to one-time addresses, no external service | ✅ live on Arc |
 
 ## Earned Wage Access — pay you've earned, before payday
 
@@ -80,6 +82,7 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 | Contract | Address |
 |---|---|
 | MagmosPayroll | `0xaE5A8a7F57490ada1d530fE4E6b8074B1E7dB36B` |
+| MagmosStealthPayout (confidential delivery) | `0x913e3841659f5a77222190E00E1A07279360494c` |
 | MagmosAdvance (earned wage access) | `0x532791bC95152424739950a90AC986FF196097FC` |
 | MagmosEquityVault (oracle-priced RSU vesting) | `0x0CdF00A15E01C389d9F5e695c5b85Ba8b96BeBA7` |
 | PythPriceRelay (AAPL/USD feed) | `0x6ED62679f04a0Ba3D9e4F1A79AaE316334CF3e2B` |
@@ -88,16 +91,17 @@ an exposure envelope once — `maxDrawBps`, a minimum draw, or off entirely — 
 | MagmosYieldVault | `0x3e711d38FFC65C278Fe78eC981bc5cEC5807D0c2` |
 | MagmosUSDC (faucet test token) | `0x3248CcD4c276b4785f81f8c1207094262F67a33C` |
 
-**93 Foundry tests** (unit, fuzz, full-lifecycle, reentrancy-attack) — including the earned-wage
-invariant `drawn + claimed == earned` under fuzz — plus a 3-agent code review with every finding
-fixed and redeployed.
+**139 Foundry tests** (unit, fuzz, full-lifecycle, reentrancy-attack) — including the earned-wage
+invariant `drawn + claimed == earned` under fuzz, and two that walk every topic *and* every data word
+of every emitted log asserting no recipient address appears. Plus **49 TypeScript tests** covering
+the stealth-address crypto and the Merkle commitment.
 
 ## Quickstart
 
 ```bash
 # contracts
 cd contracts && forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts@v5.6.1
-forge test                                  # 93 tests
+forge test                                  # 139 tests
 
 # org dashboard (needs .env.local — see .env.example)
 cd app && bun install && PORT=3100 bun dev  # http://localhost:3100
@@ -168,18 +172,44 @@ employee identities recoverable   : NO
 per-recipient amounts recoverable : NO
 ```
 
-### What this does not yet cover
+### Delivery: stealth addresses
 
-The **Unlink shielded delivery leg has not been executed.** It needs `UNLINK_API_KEY`, which cannot
-be self-issued. The code path is written and checked against the SDK, but no shielded transfer has
-been made, so nothing here claims one has. What is proven is the settlement leg; that is exactly as
-far as the claim goes.
+Settling privately is only half the job — the money still has to reach people, and an ordinary
+ERC-20 payout would republish everything settlement just hid. Arc's own confidential transfers would
+solve this, but Arc's docs state privacy is *"on the roadmap and not yet available"*, so Magmos
+builds the delivery leg itself, on-chain, with **no external privacy service**.
 
-Getting there is one command once the key is in `app/.env.local`:
+Each employee publishes a meta-address once — a spending key and a viewing key, derived in their
+browser from a wallet signature and never sent anywhere. For every payment the employer derives a
+one-time address by ECDH:
+
+```
+R = r·G                    published in the Announcement
+s = keccak256(r·V)         shared secret (employer has r, employee has v)
+P = S + s·G                one-time stealth pubkey
+```
+
+Only the employee can compute the matching private key. Payments are committed as a Merkle root and
+funded in **one** transaction — not N transfers, because N transfers publish N amounts together and
+bind every recipient into a single correlatable cohort. Employees find their own payment by scanning
+announcements with their viewing key, then claim whenever they like, to wherever they like. The
+stealth address never needs gas: it only signs, and anyone can relay.
+
+Run the whole thing yourself:
 
 ```bash
-cd app && node scripts/sealed-preflight.mjs
+cd app && node scripts/stealth-run.mjs
 ```
+
+Real transactions from that run — settle, batch, then three independent claims:
+
+| Leg | Transaction |
+| --- | --- |
+| settleAllSealed | [`0x11eaf902…`](https://testnet.arcscan.app/tx/0x11eaf9027c2f28398ccd02fe95775b8f0f943575d7fdf04e18d6fafe81f25327) |
+| fundBatch | [`0x56177654…`](https://testnet.arcscan.app/tx/0x561776540506a7b9794d503df8c18a3a9e2bda21ce7615462674c86c4d7f43dc) |
+| claim ×3 | [`0x0a4016f7…`](https://testnet.arcscan.app/tx/0x0a4016f7d7b3633a8a6c957464dfd9abfcc30d3c9be1ffa7faa65b978dce5005) · [`0x1ec15b3b…`](https://testnet.arcscan.app/tx/0x1ec15b3b7803cf3203d886da13fb412e10d273936064a78004a418ed4d7eb901) · [`0xe990ab3b…`](https://testnet.arcscan.app/tx/0xe990ab3b32652e44c993ee2f346e3581f150210386385f5e5c4180fd260de66c) |
+
+Across all five: **no employee address appears in any calldata or any log.**
 
 ## Honest status
 
@@ -189,9 +219,12 @@ browser biometric respectively.
 
 An earlier revision of this project settled payroll one employee at a time and described that as
 private. It was not: `settleSealed`'s calldata carries the recipient and the amount, and calldata is
-public regardless of what an event emits. That is fixed — payroll now goes through
-`settleAllSealed` — and the verification script keeps the old path under test so the mistake cannot
-quietly return.
+public regardless of what an event emits. That is fixed — payroll goes through `settleAllSealed` —
+and the verification script keeps the old path under test as a control so the mistake cannot quietly
+return.
+
+An employee who has not registered a payout key is **not paid** by the confidential path. They are
+held back and reported, rather than quietly paid in the clear.
 
 ---
 
