@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useSignMessage, useWriteContract } from "wagmi";
+import { usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { ShieldCheck, KeyRound, Wallet } from "lucide-react";
 
 import { CardLabel, SweemCard } from "@/components/sweem-ui/primitives";
 import { useSweemApi } from "@/lib/api";
+import { decodeEventLog } from "viem";
 import { EXPLORER_TX, MAGMOS_STEALTH_PAYOUT, STEALTH_PAYOUT_ABI, ARC_CHAIN_ID } from "@/lib/magmos";
 import {
   checkAnnouncement,
   claimTypedData,
   deriveStealthKeys,
+  reconstructClaim,
   stealthDerivationMessage,
   type StealthKeys,
 } from "@/lib/stealth";
@@ -46,6 +48,8 @@ export function ClaimScreen() {
   const wallet = api.address;
   const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+  const [recovered, setRecovered] = useState<Payment[] | null>(null);
 
   const [keys, setKeys] = useState<StealthKeys | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -128,6 +132,80 @@ export function ClaimScreen() {
     }
   }
 
+  /**
+   * Recover every payment straight from Arc, ignoring our own database entirely.
+   *
+   * This is the honest test of the design: if Magmos vanished, could an employee still find and
+   * claim their salary? It reads Announcement and BatchLeaves logs, decrypts the amount with the
+   * viewing key, rebuilds the tree from the published leaves and derives the proof locally. Nothing
+   * it produces came from a server.
+   */
+  async function recoverFromChain() {
+    if (!keys || !publicClient) return;
+    setBusy("recover");
+    try {
+      const latest = await publicClient.getBlockNumber();
+      // Arc caps eth_getLogs at 10,000 blocks per call, so walk back in windows rather than asking
+      // for the whole chain and getting an error that looks like "no payments found".
+      const WINDOW = 9_000n;
+      const anns: { batchId: `0x${string}`; ephemeralPubKey: `0x${string}`; viewTag: number; encryptedAmount: `0x${string}` }[] = [];
+      const leavesByBatch = new Map<string, `0x${string}`[]>();
+
+      for (let i = 0n; i < 12n; i++) {
+        const to = latest - i * WINDOW;
+        const from = to > WINDOW ? to - WINDOW : 0n;
+        const logs = await publicClient.getLogs({
+          address: MAGMOS_STEALTH_PAYOUT,
+          fromBlock: from,
+          toBlock: to,
+        });
+        for (const log of logs) {
+          try {
+            const d = decodeEventLog({ abi: STEALTH_PAYOUT_ABI, data: log.data, topics: log.topics });
+            if (d.eventName === "Announcement") {
+              const a = d.args as unknown as { batchId: `0x${string}`; ephemeralPubKey: `0x${string}`; viewTag: number; encryptedAmount: `0x${string}` };
+              anns.push(a);
+            } else if (d.eventName === "BatchLeaves") {
+              const a = d.args as unknown as { batchId: string; leaves: `0x${string}`[] };
+              leavesByBatch.set(a.batchId.toLowerCase(), a.leaves);
+            }
+          } catch {
+            /* not one of ours */
+          }
+        }
+        if (from === 0n) break;
+      }
+
+      const mine: Payment[] = [];
+      for (const a of anns) {
+        const leaves = leavesByBatch.get(a.batchId.toLowerCase());
+        if (!leaves) continue;
+        const r = reconstructClaim(keys, a, leaves);
+        if (!r) continue;
+        mine.push({
+          batchId: a.batchId,
+          stealthAddress: r.stealthAddress,
+          amountUsdc: Number(r.amountMicros) / 1e6,
+          amountMicros: r.amountMicros.toString(),
+          proof: r.proof,
+          runId: "recovered-from-chain",
+          ephemeralPubKey: a.ephemeralPubKey,
+          viewTag: a.viewTag,
+        });
+      }
+      setRecovered(mine);
+      toast.success(
+        mine.length
+          ? `Recovered ${mine.length} payment(s) from Arc — no server involved`
+          : "Scanned Arc and found no payments for these keys"
+      );
+    } catch (e) {
+      toast.error((e as Error).message.slice(0, 160));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!wallet) {
     return (
       <div className="dashboard-content">
@@ -137,6 +215,8 @@ export function ClaimScreen() {
   }
 
   const s = statusQuery.data;
+  // Chain-recovered payments win when present: they are strictly more trustworthy than ours.
+  const shown = recovered ?? s?.payments ?? [];
 
   return (
     <div className="dashboard-content">
@@ -191,16 +271,36 @@ export function ClaimScreen() {
       </SweemCard>
 
       <SweemCard className="mt-4">
-        <CardLabel>Waiting for you</CardLabel>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardLabel>Waiting for you</CardLabel>
+            {recovered && (
+              <p className="mt-1 text-[12.5px] text-[var(--sw-mint)]">
+                Showing {recovered.length} payment(s) rebuilt from Arc itself — amount decrypted and
+                proof derived locally, with no help from our servers.
+              </p>
+            )}
+          </div>
+          {keys && (
+            <button
+              onClick={recoverFromChain}
+              disabled={busy !== null}
+              title="Ignore our database and rebuild everything from on-chain logs"
+              className="rounded-full border border-[var(--sw-border-strong)] px-3.5 py-1.5 text-[12.5px] text-[var(--sw-text)] disabled:opacity-50"
+            >
+              {busy === "recover" ? "Scanning Arc…" : "Recover from chain"}
+            </button>
+          )}
+        </div>
         {statusQuery.isLoading && (
           <p className="mt-2 text-[14px] text-[var(--sw-text-muted)]">Checking…</p>
         )}
-        {s && s.payments.length === 0 && (
+        {s && shown.length === 0 && (
           <p className="mt-2 text-[14px] text-[var(--sw-text-muted)]">
             No delivered payments yet. They appear here after your employer runs payroll.
           </p>
         )}
-        {s?.payments.map((p) => (
+        {shown.map((p) => (
           <div
             key={p.batchId + p.stealthAddress}
             className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--sw-border)] pt-3 first:border-t-0"
@@ -236,7 +336,7 @@ export function ClaimScreen() {
             </button>
           </div>
         ))}
-        {s && s.payments.length > 0 && !keys && (
+        {s && shown.length > 0 && !keys && (
           <p className="mt-3 flex items-center gap-2 text-[12.5px] text-[var(--sw-text-muted)]">
             <ShieldCheck size={14} /> Unlock your keys above to claim — the signature happens locally.
           </p>
