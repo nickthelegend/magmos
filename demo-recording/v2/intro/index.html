@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0; width: 1920px; height: 1080px; overflow: hidden;
+        background: #0b0b0e;
+      }
+      body { font-family: "Inter", -apple-system, system-ui, sans-serif; }
+      code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+      #root { position: relative; }
+      .clip { position: absolute; inset: 0; }
+
+      /* A faint grid reads as "ledger" without anyone having to be told. */
+      .grid {
+        background-image:
+          linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+        background-size: 64px 64px;
+      }
+      .glow {
+        position: absolute; border-radius: 999px; filter: blur(120px); opacity: .5;
+      }
+
+      .stage { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 0 132px; }
+      .kicker {
+        font-size: 20px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase;
+        color: #FF6A1A;
+      }
+      h1 { font-size: 92px; line-height: 1.04; letter-spacing: -.035em; color: #fff; font-weight: 650; }
+      h1 .dim { color: #6b6b78; }
+      .sub { margin-top: 26px; font-size: 30px; line-height: 1.5; color: #adadba; max-width: 30ch; }
+
+      /* ── the public ledger ── */
+      .ledger {
+        position: absolute; right: 132px; top: 50%; transform: translateY(-50%);
+        width: 760px; border: 1px solid #24242c; border-radius: 20px; overflow: hidden;
+        background: #101014; box-shadow: 0 40px 120px rgba(0,0,0,.6);
+      }
+      .lhead {
+        display: flex; gap: 16px; align-items: center; padding: 18px 26px;
+        background: #16161c; border-bottom: 1px solid #24242c;
+        font-size: 16px; color: #9b9baa; letter-spacing: .04em;
+      }
+      .row {
+        display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center;
+        padding: 22px 26px; border-bottom: 1px solid #1c1c23;
+      }
+      .who { font-size: 24px; color: #e8e8ef; }
+      .addr { display: block; font-size: 15px; color: #8d8d9c; margin-top: 6px; }
+      .amt { font-size: 28px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+      .leak { color: #f87171 !important; }
+
+      .stamp {
+        position: absolute; left: 132px; top: 74%; transform: rotate(-7deg);
+        border: 4px solid #f87171; color: #f87171; border-radius: 14px;
+        padding: 14px 30px; font-size: 40px; font-weight: 800; letter-spacing: .06em;
+      }
+
+      /* ── consequence ── */
+      .stabs { display: flex; flex-direction: column; gap: 30px; margin-top: 44px; }
+      .stab { display: flex; align-items: center; gap: 22px; font-size: 40px; color: #d6d6df; }
+      .stab .dot { width: 12px; height: 12px; border-radius: 99px; background: #f87171; flex: 0 0 auto; }
+
+      /* ── solution ── */
+      .split { display: flex; gap: 28px; margin-top: 54px; }
+      .card {
+        flex: 1; border: 1px solid #24242c; border-radius: 22px; padding: 40px 38px; background: #101014;
+      }
+      .card.on { border-color: rgba(255,106,26,.42); background: rgba(255,106,26,.07); }
+      .clabel { font-size: 18px; letter-spacing: .14em; text-transform: uppercase; color: #9b9baa; }
+      .card.on .clabel { color: #FF6A1A; }
+      .cbody { margin-top: 16px; font-size: 34px; line-height: 1.32; color: #fff; font-weight: 550; }
+      .cnote { margin-top: 14px; font-size: 21px; color: #adadba; }
+
+      .wordmark { display: flex; align-items: baseline; gap: 20px; }
+      .wordmark .m { font-size: 104px; font-weight: 680; letter-spacing: -.04em; color: #fff; }
+      .wordmark .tag { font-size: 26px; color: #a6a6b3; letter-spacing: .02em; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="41.4"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- ── Scene A · the problem (0 – 14.31) ────────────────────────────── -->
+      <div id="sA" class="clip grid" data-start="0" data-duration="14.9" data-track-index="1">
+        <div class="glow" style="width:900px;height:900px;background:#f87171;left:-260px;top:-220px;opacity:.13"></div>
+        <div class="stage" style="width:56%">
+          <div id="sA-k" class="kicker">The problem</div>
+          <h1 id="sA-h" style="margin-top:22px">
+            Put payroll on a public chain,<br />
+            and <span class="dim">everyone's salary</span><br />
+            is public too.
+          </h1>
+        </div>
+
+        <div id="sA-l" class="ledger">
+          <div class="lhead"><span>●</span><span>Public ledger · anyone can read this</span></div>
+          <div class="row lr"><div><span class="who">Maya Santos</span><span class="addr mono">0xba1f…9485</span></div><div class="amt">$4,200.00</div></div>
+          <div class="row lr"><div><span class="who">Amara Diallo</span><span class="addr mono">0x6c60…8715</span></div><div class="amt">$5,600.00</div></div>
+          <div class="row lr"><div><span class="who">Hassan Raza</span><span class="addr mono">0xccb8…c52c</span></div><div class="amt">$2,800.00</div></div>
+          <div class="row lr" style="border-bottom:none"><div><span class="who">Priya Nair</span><span class="addr mono">0x9f31…2ad0</span></div><div class="amt">$7,150.00</div></div>
+        </div>
+        <div id="sA-stamp" class="stamp">READABLE</div>
+      </div>
+
+      <!-- ── Scene B · the consequence (14.31 – 26.30) ────────────────────── -->
+      <div id="sB" class="clip grid" data-start="14.31" data-duration="12.4" data-track-index="2">
+        <div class="glow" style="width:820px;height:820px;background:#f87171;right:-180px;bottom:-240px;opacity:.12"></div>
+        <div class="stage">
+          <div id="sB-k" class="kicker">What that costs you</div>
+          <div class="stabs">
+            <div class="stab sb"><span class="dot"></span>Your engineers can see what your designers make.</div>
+            <div class="stab sb"><span class="dot"></span>Your competitors can see what you pay to hire.</div>
+            <div class="stab sb"><span class="dot"></span>It is searchable by address. Forever.</div>
+          </div>
+          <div id="sB-note" class="sub" style="max-width:44ch;margin-top:46px">
+            Which is why most companies look at stablecoin payroll once — and never again.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Scene C · the solution (26.30 – 41.4) ────────────────────────── -->
+      <div id="sC" class="clip grid" data-start="26.3" data-duration="15.1" data-track-index="1">
+        <div class="glow" style="width:1000px;height:1000px;background:#FF6A1A;left:50%;top:-360px;margin-left:-500px;opacity:.16"></div>
+        <div class="stage">
+          <div id="sC-w" class="wordmark">
+            <span class="m">Magmos</span>
+            <span class="tag">real-time payroll on Circle's Arc</span>
+          </div>
+          <div id="sC-h" class="sub" style="font-size:38px;color:#e8e8ef;max-width:38ch;margin-top:26px">
+            Split it the way payroll actually needs.
+          </div>
+          <div class="split">
+            <div class="card sc-card">
+              <div class="clabel">Public</div>
+              <div class="cbody">That payroll ran, and what it cost in total.</div>
+              <div class="cnote">Auditable, on-chain, by anyone.</div>
+            </div>
+            <div class="card sc-card on">
+              <div class="clabel">Confidential</div>
+              <div class="cbody">Who was paid, and how much each person got.</div>
+              <div class="cnote">Not in the logs. Not in the calldata.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      /* Scene A — the headline lands first, then the ledger fills in underneath it, then the
+         salaries turn red one by one. The order is the argument: the claim, the evidence, the
+         problem with the evidence. */
+      tl.from("#sA-k", { opacity: 0, y: 18, duration: 0.5 }, 0.15)
+        .from("#sA-h", { opacity: 0, y: 30, duration: 0.7 }, 0.3)
+        .from("#sA-l", { opacity: 0, x: 60, duration: 0.8 }, 0.75)
+        .from("#sA .lr", { opacity: 0, y: 16, duration: 0.45, stagger: 0.16 }, 1.15)
+        .to("#sA .amt", { color: "#f87171", duration: 0.35, stagger: 0.28 }, 4.4)
+        .from("#sA-stamp", { opacity: 0, scale: 1.5, duration: 0.5, ease: "back.out(2)" }, 6.4)
+        .to("#sA-stamp", { opacity: 0.9, duration: 0.2 }, 6.9)
+        // Hold, then leave — the fade is on the scene, so nothing lingers into Scene B.
+        .to("#sA", { opacity: 0, duration: 0.5 }, 14.0);
+
+      /* Scene B — three stabs, deliberately paced apart so each has a beat to land. */
+      tl.from("#sB", { opacity: 0, duration: 0.45 }, 14.31)
+        .from("#sB-k", { opacity: 0, y: 16, duration: 0.45 }, 14.5)
+        .from("#sB .sb", { opacity: 0, x: -28, duration: 0.55, stagger: 1.5 }, 14.9)
+        .from("#sB-note", { opacity: 0, y: 20, duration: 0.6 }, 20.4)
+        .to("#sB", { opacity: 0, duration: 0.5 }, 25.9);
+
+      /* Scene C — the turn. Wordmark, then the split, with the confidential card arriving last
+         because it is the one the whole video is about. */
+      tl.from("#sC", { opacity: 0, duration: 0.5 }, 26.3)
+        .from("#sC-w", { opacity: 0, y: 26, duration: 0.7 }, 26.5)
+        .from("#sC-h", { opacity: 0, y: 20, duration: 0.6 }, 27.3)
+        .from("#sC .sc-card", { opacity: 0, y: 40, duration: 0.75, stagger: 0.55 }, 28.2)
+        .fromTo(
+          "#sC .card.on",
+          { boxShadow: "0 0 0 rgba(255,106,26,0)" },
+          { boxShadow: "0 24px 90px rgba(255,106,26,.22)", duration: 1.1 },
+          29.6
+        );
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

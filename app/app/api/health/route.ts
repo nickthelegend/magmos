@@ -7,6 +7,7 @@ import {
   ARC_CHAIN_ID,
 } from '@/lib/magmos'
 import { getDb } from '@/lib/mongo'
+import { arcCall } from '@/lib/arc-transport'
 import { settlementPublicClient, signerReadiness } from '@/lib/payroll-signer'
 
 export const runtime = 'nodejs'
@@ -44,9 +45,9 @@ export async function GET() {
   // Sequential: Arc's RPC rejects concurrent requests (-32011), and a health check that trips the
   // rate limiter would report the chain as down whenever it is actually fine.
   await time('arc-rpc', async () => {
-    const id = await settlementPublicClient.getChainId()
+    const id = await arcCall(() => settlementPublicClient.getChainId())
     if (id !== ARC_CHAIN_ID) throw new Error(`wrong chain: ${id}`)
-    const block = await settlementPublicClient.getBlockNumber()
+    const block = await arcCall(() => settlementPublicClient.getBlockNumber())
     return `chain ${id}, block ${block}`
   })
 

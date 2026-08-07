@@ -16,3 +16,9 @@ scripts/.demo-wallets.json
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+# Demo recording intermediates — raw takes and ffmpeg work files are large and regenerable.
+demo-recording/v2/raw-*/
+demo-recording/v2/work/
+demo-recording/v2/qa/
+demo-recording/v2/intro/node_modules/

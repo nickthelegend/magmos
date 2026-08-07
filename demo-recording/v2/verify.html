@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><style>
+  html,body{margin:0;height:100%;background:#0d0d10;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .win{height:100%;display:flex;flex-direction:column}
+  .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;background:#17171c;border-bottom:1px solid #26262e}
+  .dot{width:12px;height:12px;border-radius:99px}
+  .t{margin-left:10px;color:#8b8b95;font-size:12.5px}
+  pre{flex:1;margin:0;padding:26px 30px;color:#d6d6dd;font-size:16px;line-height:1.72;white-space:pre-wrap;overflow:hidden}
+  .g{color:#4ade80}.r{color:#f87171}.y{color:#fbbf24}
+  .ln{opacity:0;animation:in .01s forwards}
+  @keyframes in{to{opacity:1}}
+</style>
+<div class="win">
+  <div class="bar">
+    <span class="dot" style="background:#ff5f57"></span>
+    <span class="dot" style="background:#febc2e"></span>
+    <span class="dot" style="background:#28c840"></span>
+    <span class="t">magmos — node scripts/verify-privacy.mjs</span>
+  </div>
+  <pre id="out"></pre>
+</div>
+<script>
+  const LINES = ["","Privacy verification — settlement leg, from public chain data only","","  Known employee addresses under test: 3","  (an observer who already knows the roster is the STRONGEST adversary here —","   if they still cannot attribute a payment, a stranger certainly cannot)","","── Sealed settlements ─────────────────────────────────────────","","  0xec88d135b90b29f2ff03990bdc5e7b8656a85b8be6074c33df82a83c92e31817","    block 55676955 · status success · 2 log(s)","    PaySealed events                     : 0","    employee addresses exposed           : NONE","    salary amounts readable in the clear : 1","      (0.041665 — treasury-side movement, not attributable to a recipient)","","  0x6cae5dfbb5bae6af7ae36323bec0a21fe2e67e535420da09d2dd21dcd7dc9ea9","    block 55677410 · status success · 2 log(s)","    PaySealed events                     : 0","    employee addresses exposed           : NONE","    salary amounts readable in the clear : 1","      (0.641665 — treasury-side movement, not attributable to a recipient)","","  0x471824f2a354b8a0063c82a1d50d581abc187b9b3e8211f68d71563e38ee5a2d","    block 55731325 · status success · 2 log(s)","    PaySealed events                     : 0","    employee addresses exposed           : NONE","    salary amounts readable in the clear : 1","      (0.061110 — treasury-side movement, not attributable to a recipient)","","── Confidential delivery (stealth addresses) ──────────────────","  fundBatch  block 55731337  employee addresses exposed: NONE","  claim 1    block 55731347  employee addresses exposed: NONE","  claim 2    block 55731352  employee addresses exposed: NONE","  claim 3    block 55731356  employee addresses exposed: NONE","    → claims land at addresses the employees chose; none is their payroll wallet.","    → every proof above was rebuilt by the recipient from published leaves and an","      encrypted amount — no server involved, so this survives Magmos disappearing.","","── Control: the per-employee path, which is known to leak ─────","","  0xa65413c929bbbcdee006f9ed6556e2356ba03147883c16006dcf3586981c0721","    employee addresses exposed           : 0xba1f74a9e6858d75924e180211aca830e0b49485","    amounts readable in the clear        : 1","    → this is why settleSealed must not be used for payroll runs","","── What an ordinary ERC-20 payroll would have leaked ──────────","  A direct USDC transfer to an employee emits Transfer(from, to, value):","    • `to` is the employee, in an indexed topic — trivially searchable","    • `value` is the exact salary, in the clear","    • anyone can filter the whole payroll history by employee address forever","  That is the baseline this replaces.","","── Verdict ────────────────────────────────────────────────────","  sealed settlements analysed          : 3","  delivery transactions analysed       : 4","  PaySealed commitments emitted        : 0","  employee identities recoverable      : NO","  per-recipient amounts recoverable    : NO","","  Public by design: batch total, recipient count, and each claim amount and","  destination. Aggregate spend stays auditable; identity is the secret.","",""];
+  const out = document.getElementById('out');
+  let i = 0;
+  // Paced so the whole transcript lands inside the two narration beats that describe it.
+  const step = () => {
+    if (i >= LINES.length) return;
+    const d = document.createElement('div');
+    d.className = 'ln';
+    d.innerHTML = LINES[i] || '&nbsp;';
+    out.appendChild(d);
+    // Keep the verdict block in frame rather than scrolling it away.
+    while (out.scrollHeight > out.clientHeight && out.firstChild) out.removeChild(out.firstChild);
+    i++;
+    setTimeout(step, 433);
+  };
+  setTimeout(step, 400);
+</script>

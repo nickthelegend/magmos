@@ -19,6 +19,7 @@ import {
   STEALTH_PAYOUT_ABI,
   USDC,
 } from './magmos'
+import { arcCall } from './arc-transport'
 import { signerAccount, settlementPublicClient } from './payroll-signer'
 import {
   buildMerkleTree,
@@ -113,12 +114,12 @@ export async function deliverBatch(
   // ERC20InsufficientBalance, because the money was never there.
   //
   // Sequential throughout: Arc's RPC rejects concurrent requests outright (-32011).
-  const orgAllowance = (await settlementPublicClient.readContract({
+  const orgAllowance = (await arcCall(() => settlementPublicClient.readContract({
     address: USDC,
     abi: erc20Abi,
     functionName: 'allowance',
     args: [org, acct.address],
-  })) as bigint
+  }))) as bigint
   if (orgAllowance < totalMicros) {
     throw new Error(
       `The payroll signer may only spend what the org has approved. Allowance is ` +
@@ -127,31 +128,31 @@ export async function deliverBatch(
     )
   }
 
-  const pullTx = await wallet.writeContract({
+  const pullTx = await arcCall(() => wallet.writeContract({
     address: USDC,
     abi: erc20Abi,
     functionName: 'transferFrom',
     args: [org, acct.address, totalMicros],
-  })
-  await settlementPublicClient.waitForTransactionReceipt({ hash: pullTx })
+  }))
+  await arcCall(() => settlementPublicClient.waitForTransactionReceipt({ hash: pullTx }))
 
-  const payoutAllowance = (await settlementPublicClient.readContract({
+  const payoutAllowance = (await arcCall(() => settlementPublicClient.readContract({
     address: USDC,
     abi: erc20Abi,
     functionName: 'allowance',
     args: [acct.address, MAGMOS_STEALTH_PAYOUT],
-  })) as bigint
+  }))) as bigint
   if (payoutAllowance < totalMicros) {
-    const approveTx = await wallet.writeContract({
+    const approveTx = await arcCall(() => wallet.writeContract({
       address: USDC,
       abi: erc20Abi,
       functionName: 'approve',
       args: [MAGMOS_STEALTH_PAYOUT, totalMicros],
-    })
-    await settlementPublicClient.waitForTransactionReceipt({ hash: approveTx })
+    }))
+    await arcCall(() => settlementPublicClient.waitForTransactionReceipt({ hash: approveTx }))
   }
 
-  const fundTxHash = await wallet.writeContract({
+  const fundTxHash = await arcCall(() => wallet.writeContract({
     address: MAGMOS_STEALTH_PAYOUT,
     abi: STEALTH_PAYOUT_ABI,
     functionName: 'fundBatch',
@@ -169,8 +170,8 @@ export async function deliverBatch(
       // Published so any recipient can rebuild the tree and derive their own proof without us.
       leaves,
     ],
-  })
-  const rc = await settlementPublicClient.waitForTransactionReceipt({ hash: fundTxHash })
+  }))
+  const rc = await arcCall(() => settlementPublicClient.waitForTransactionReceipt({ hash: fundTxHash }))
   if (rc.status !== 'success') throw new Error(`fundBatch reverted (${fundTxHash})`)
 
   return {

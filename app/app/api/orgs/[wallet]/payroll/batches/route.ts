@@ -4,6 +4,7 @@ import { requireOwner } from '@/lib/auth'
 import { MAGMOS_STEALTH_PAYOUT, STEALTH_PAYOUT_ABI } from '@/lib/magmos'
 import { getDb, COLLECTIONS } from '@/lib/mongo'
 import { ensureIndexes } from '@/lib/mongo-indexes'
+import { arcCall } from '@/lib/arc-transport'
 import { settlementPublicClient } from '@/lib/payroll-signer'
 import { LIMITS, rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
@@ -74,12 +75,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   for (const g of grouped) {
     let onChain: OnChainBatch | null = null
     try {
-      onChain = (await settlementPublicClient.readContract({
+      onChain = (await arcCall(() => settlementPublicClient.readContract({
         address: MAGMOS_STEALTH_PAYOUT,
         abi: STEALTH_PAYOUT_ABI,
         functionName: 'getBatch',
         args: [g._id as Hex],
-      })) as OnChainBatch
+      }))) as OnChainBatch
     } catch {
       // A batch funded by an older deployment will not resolve here. Reporting it as unreadable is
       // honest; reporting zeros would look like nobody had been paid.

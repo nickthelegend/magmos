@@ -1,0 +1,9 @@
+{
+  "settleTx": "0x11061dd623b4e595e583ec1def62bf52a8ac8f9a2992570b129b520d3e181b05",
+  "settleCalldataBytes": 64,
+  "settleTotal": "0.874998",
+  "settleCount": 3,
+  "batchTx": "0x70eb5df036c20aca0184ed3b816d0d28acbd684fa230761494832d43640e8ca5",
+  "batchTotal": "0.808332",
+  "batchRecipients": 3
+}

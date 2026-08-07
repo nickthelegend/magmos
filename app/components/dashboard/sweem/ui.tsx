@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { WalletButton } from "@/components/dashboard/wallet-button";
 import { AnimatePresence, motion } from "framer-motion";
 import { ProtocolLogo } from "@/components/sweem-ui/protocol-logo";
 import { TokenIcon } from "@/components/sweem-ui/token-icon";
@@ -87,8 +88,21 @@ export function Modal({
   );
 }
 
+/**
+ * The gate shown when a screen needs a wallet.
+ *
+ * It used to render the message alone — which meant someone landing on /claim was told to connect
+ * and given nothing to connect with. The only route through was the sidebar, and /claim is a page
+ * workers reach by link, often with no sidebar in view. A gate that states a requirement without
+ * offering the action is a dead end, so the button lives here now.
+ */
 export function ConnectGate({ message }: { message: string }) {
-  return <div className="sweem-gate">{message}</div>;
+  return (
+    <div className="sweem-gate flex flex-col items-start gap-3">
+      <span>{message}</span>
+      <WalletButton />
+    </div>
+  );
 }
 
 // Quick-fill chips (25/50/75/Max) that pick a fraction of `max` for an amount field.

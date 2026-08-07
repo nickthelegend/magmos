@@ -1,0 +1,105 @@
+{
+  "segments": [
+    {
+      "id": "intro_problem",
+      "seconds": 14.31,
+      "words": 34
+    },
+    {
+      "id": "intro_problem2",
+      "seconds": 11.99,
+      "words": 32
+    },
+    {
+      "id": "intro_solution",
+      "seconds": 15.1,
+      "words": 35
+    },
+    {
+      "id": "landing",
+      "seconds": 11.16,
+      "words": 24
+    },
+    {
+      "id": "roster",
+      "seconds": 14.49,
+      "words": 33
+    },
+    {
+      "id": "roster_badge",
+      "seconds": 15.15,
+      "words": 41
+    },
+    {
+      "id": "agent",
+      "seconds": 11.14,
+      "words": 25
+    },
+    {
+      "id": "verdict",
+      "seconds": 18.62,
+      "words": 47
+    },
+    {
+      "id": "settle",
+      "seconds": 13.95,
+      "words": 33
+    },
+    {
+      "id": "delivered",
+      "seconds": 11.16,
+      "words": 31
+    },
+    {
+      "id": "explorer_intro",
+      "seconds": 6.23,
+      "words": 17
+    },
+    {
+      "id": "explorer_settle",
+      "seconds": 19.33,
+      "words": 44
+    },
+    {
+      "id": "explorer_batch",
+      "seconds": 15.17,
+      "words": 35
+    },
+    {
+      "id": "employee_intro",
+      "seconds": 16.75,
+      "words": 43
+    },
+    {
+      "id": "employee_recover",
+      "seconds": 16.26,
+      "words": 41
+    },
+    {
+      "id": "employee_claim",
+      "seconds": 20.12,
+      "words": 52
+    },
+    {
+      "id": "verify",
+      "seconds": 18.28,
+      "words": 43
+    },
+    {
+      "id": "verify_result",
+      "seconds": 12.5,
+      "words": 25
+    },
+    {
+      "id": "batches",
+      "seconds": 16.6,
+      "words": 40
+    },
+    {
+      "id": "close",
+      "seconds": 21.87,
+      "words": 51
+    }
+  ],
+  "totalSeconds": 300.16
+}

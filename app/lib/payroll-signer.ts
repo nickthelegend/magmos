@@ -27,6 +27,7 @@ import {
   type Hex,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+import { arcCall } from './arc-transport'
 import { ARC_CHAIN_ID, ARC_RPC_URL, MAGMOS_PAYROLL, PAYROLL_ABI, SEALER_ROLE } from './magmos'
 
 const arc = defineChain({
@@ -74,12 +75,12 @@ export async function signerCanSettle(poolId: Hex): Promise<{ ok: boolean; reaso
   const acct = signerAccount()
   if (!acct) return { ok: false, reason: 'PAYROLL_SIGNER_KEY is not configured' }
   try {
-    const has = await settlementPublicClient.readContract({
+    const has = await arcCall(() => settlementPublicClient.readContract({
       address: MAGMOS_PAYROLL,
       abi: PAYROLL_ABI,
       functionName: 'hasPoolRole',
       args: [poolId, acct.address, SEALER_ROLE],
-    })
+    }))
     return has
       ? { ok: true }
       : {
@@ -117,13 +118,13 @@ export async function settleAllSealedOnChain(
   if (!acct) throw new Error('PAYROLL_SIGNER_KEY is not configured')
 
   const wallet = createWalletClient({ account: acct, chain: arc, transport: http(ARC_RPC_URL) })
-  const txHash = await wallet.writeContract({
+  const txHash = await arcCall(() => wallet.writeContract({
     address: MAGMOS_PAYROLL,
     abi: PAYROLL_ABI,
     functionName: 'settleAllSealed',
     args: [poolId, sealRef],
-  })
-  const rc = await settlementPublicClient.waitForTransactionReceipt({ hash: txHash })
+  }))
+  const rc = await arcCall(() => settlementPublicClient.waitForTransactionReceipt({ hash: txHash }))
   if (rc.status !== 'success') throw new Error(`settleAllSealed reverted (${txHash})`)
 
   // The totals come back from the PayrollSealed event rather than being assumed from the draft, so
