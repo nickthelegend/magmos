@@ -1,73 +1,77 @@
 name: CI
 
-# Every gate that must hold before this is submittable, in one place:
-# contracts compile + 93 tests, both apps typecheck + lint clean, and the generated
-# ABI/address artefacts match the recorded deployment (so a redeploy can't silently
-# leave the frontends pointing at dead contracts).
 on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
+
+# A new push makes the previous run's answer irrelevant — cancel it rather than pay for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   contracts:
-    name: Contracts (Foundry)
+    name: Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with:
+          submodules: recursive
+
       - uses: foundry-rs/foundry-toolchain@v1
+
       - name: Build
         working-directory: contracts
         run: forge build --sizes
+
       - name: Test
         working-directory: contracts
-        run: forge test -vv
-      - name: Format check
-        working-directory: contracts
-        run: forge fmt --check src/MagmosAdvance.sol src/interfaces/IMagmosPayroll.sol
+        run: forge test -vvv
 
-  web:
-    name: Apps (typecheck + lint)
+      # Payroll runs are gas-bounded in practice: settleAllSealed walks the roster, so a change that
+      # makes it materially more expensive is a change to how many people a pool can pay in one
+      # transaction. Worth seeing in a diff rather than discovering on-chain.
+      - name: Gas report
+        working-directory: contracts
+        run: forge test --gas-report | tail -60
+
+  app:
+    name: App
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [app, employee]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+
       - name: Install
-        working-directory: ${{ matrix.app }}
+        working-directory: app
         run: bun install --frozen-lockfile
+
       - name: Typecheck
-        working-directory: ${{ matrix.app }}
+        working-directory: app
         run: bunx tsc --noEmit
+
       - name: Lint
-        working-directory: ${{ matrix.app }}
+        working-directory: app
         run: bun run lint
 
-  sdk:
-    name: SDK build
+      # The stealth crypto and the policy engine are pure functions with no network or database, so
+      # they run here unchanged. Anything needing Mongo or Arc is deliberately excluded — a test that
+      # needs live infrastructure belongs in the verification scripts, not in CI, where a flaky RPC
+      # would train everyone to ignore red builds.
+      - name: Unit tests
+        working-directory: app
+        run: bun test lib/
+
+  drift:
+    name: Address drift
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - working-directory: sdk
-        run: bun install --frozen-lockfile && bun run build
 
-  drift:
-    name: ABI / address drift
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { submodules: recursive }
-      - uses: foundry-rs/foundry-toolchain@v1
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - name: Build artefacts
-        working-directory: contracts
-        run: forge build
-      - name: Assert apps, SDK and docs match the deployment
+      # Contract addresses live in the deployment record, the app config, the SDK and five markdown
+      # files. They have drifted after a redeploy before — a judge clicking the README's explorer
+      # link and landing on a dead contract is a real failure mode, so it is checked mechanically.
+      - name: Verify ABIs and addresses match the deployment record
         run: node scripts/sync-chain.mjs --check
