@@ -32,7 +32,6 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import {
   buildMerkleTree,
-  checkAnnouncement,
   claimTypedData,
   createStealthPayment,
   deriveStealthKeys,

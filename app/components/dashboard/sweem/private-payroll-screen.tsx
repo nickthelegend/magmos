@@ -75,6 +75,20 @@ const DECISION_STYLE: Record<Decision, { label: string; cls: string; Icon: typeo
  * deterministic gate decides. So the verdict — not the agent's prose — is the loudest element, and
  * a refusal is styled as a different category from a hold rather than a stronger warning.
  */
+type Batch = {
+  batchId: string;
+  runId: string;
+  recipients: number;
+  fundTxHash?: string;
+  readable: boolean;
+  totalUsdc: number | null;
+  claimedUsdc: number | null;
+  unclaimedUsdc: number | null;
+  fullyClaimed: boolean;
+  expiresInDays: number | null;
+  reclaimable: boolean;
+};
+
 type SettleResponse = {
   runId: string;
   status: string;
@@ -91,6 +105,14 @@ export function PrivatePayrollScreen() {
   const [result, setResult] = useState<AgentResponse | null>(null);
   const [settling, setSettling] = useState(false);
   const [settleResult, setSettleResult] = useState<SettleResponse | null>(null);
+
+  const batchQuery = useQuery<{ batches: Batch[] }>({
+    queryKey: ["payrollBatches", wallet],
+    enabled: !!wallet,
+    refetchInterval: 30000,
+    queryFn: async () =>
+      (await api.authedFetch(`/api/orgs/${wallet}/payroll/batches`, "GET")).data as { batches: Batch[] },
+  });
 
   const auditQuery = useQuery<AuditRow[]>({
     queryKey: ["payrollAudit", wallet],
@@ -143,6 +165,7 @@ export function PrivatePayrollScreen() {
       if (data.failed.length) toast.error(`${data.settled.length} settled, ${data.failed.length} failed`);
       else toast.success(`Settled ${data.settled.length} recipient(s) on Arc`);
       await auditQuery.refetch();
+      await batchQuery.refetch();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -369,6 +392,71 @@ export function PrivatePayrollScreen() {
               ? `Confidential delivery completed via ${settleResult.confidentialDelivery.provider}. Amounts and counterparties are not readable on the explorer.`
               : settleResult.confidentialDelivery.reason}
           </p>
+        </SweemCard>
+      )}
+
+      {/* delivery batches — reconciled against the chain, not just our own records */}
+      {(batchQuery.data?.batches?.length ?? 0) > 0 && (
+        <SweemCard className="mt-4">
+          <CardLabel>Delivery batches</CardLabel>
+          <p className="mt-1 text-[13px] text-[var(--sw-text-muted)]">
+            Claimed figures come from the contract, not from our database — an employee who has not
+            claimed yet has probably lost their keys or never set them up, and you want to know
+            before the window closes.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-[13px]">
+              <thead>
+                <tr className="text-left text-[11.5px] uppercase tracking-[0.06em] text-[var(--sw-text-dim)]">
+                  <th className="pb-2 font-medium">Batch</th>
+                  <th className="pb-2 font-medium">People</th>
+                  <th className="pb-2 text-right font-medium">Delivered</th>
+                  <th className="pb-2 text-right font-medium">Unclaimed</th>
+                  <th className="pb-2 text-right font-medium">Window</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batchQuery.data!.batches.map((b) => (
+                  <tr key={b.batchId} className="border-t border-[var(--sw-border)]">
+                    <td className="py-2 font-mono text-[11.5px] text-[var(--sw-text-muted)]">
+                      {b.fundTxHash ? (
+                        <a
+                          href={EXPLORER_TX(b.fundTxHash)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--sw-mint)] underline underline-offset-2"
+                        >
+                          {b.batchId.slice(0, 10)}…
+                        </a>
+                      ) : (
+                        `${b.batchId.slice(0, 10)}…`
+                      )}
+                    </td>
+                    <td className="py-2 text-[var(--sw-text)]">{b.recipients}</td>
+                    <td className="py-2 text-right tabular-nums text-[var(--sw-text)]">
+                      {b.readable ? b.totalUsdc!.toFixed(6) : "—"}
+                    </td>
+                    <td
+                      className={`py-2 text-right tabular-nums ${
+                        b.unclaimedUsdc ? "text-[var(--sw-lavender)]" : "text-[var(--sw-text-muted)]"
+                      }`}
+                    >
+                      {b.readable ? b.unclaimedUsdc!.toFixed(6) : "—"}
+                    </td>
+                    <td className="py-2 text-right text-[12px] text-[var(--sw-text-muted)]">
+                      {!b.readable
+                        ? "older contract"
+                        : b.fullyClaimed
+                          ? "all claimed"
+                          : b.reclaimable
+                            ? "reclaimable"
+                            : `${b.expiresInDays}d left`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </SweemCard>
       )}
 
